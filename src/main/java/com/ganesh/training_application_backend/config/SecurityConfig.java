@@ -3,24 +3,63 @@ package com.ganesh.training_application_backend.config;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.HttpStatusEntryPoint;
+import org.springframework.security.web.authentication.session.ChangeSessionIdAuthenticationStrategy;
+import org.springframework.security.web.authentication.session.SessionAuthenticationStrategy;
+import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
+import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
+import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.util.matcher.RequestMatcher;
 
 @Configuration
 public class SecurityConfig {
 
 	@Bean
-	SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+	PasswordEncoder passwordEncoder() {
+		return new BCryptPasswordEncoder();
+	}
+
+	@Bean
+	SecurityContextRepository securityContextRepository() {
+		return new HttpSessionSecurityContextRepository();
+	}
+
+	@Bean
+	SessionAuthenticationStrategy sessionAuthenticationStrategy() {
+		return new ChangeSessionIdAuthenticationStrategy();
+	}
+
+	@Bean
+	SecurityFilterChain securityFilterChain(HttpSecurity http,
+			SecurityContextRepository securityContextRepository) throws Exception {
 		RequestMatcher quizSubmit = PathPatternRequestMatcher.pathPattern(
 				HttpMethod.POST, "/api/courses/{courseId}/modules/{moduleId}/quiz/submit");
+		RequestMatcher signup = PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/auth/signup");
+		RequestMatcher login = PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/auth/login");
+		RequestMatcher csrfToken = PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/auth/csrf");
+		AuthenticationEntryPoint unauthorized = new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED);
+		CookieCsrfTokenRepository csrfTokenRepository = CookieCsrfTokenRepository.withHttpOnlyFalse();
+		csrfTokenRepository.setCookiePath("/");
 
-		// Temporary authorization boundary until the real authentication flow is implemented.
 		return http
-				.csrf(csrf -> csrf.ignoringRequestMatchers(quizSubmit))
+				.securityContext(context -> context
+						.securityContextRepository(securityContextRepository)
+						.requireExplicitSave(true))
+				.csrf(csrf -> csrf
+						.csrfTokenRepository(csrfTokenRepository)
+						.spa()
+						.ignoringRequestMatchers(quizSubmit, signup, login))
+				.exceptionHandling(exceptions -> exceptions.authenticationEntryPoint(unauthorized))
 				.authorizeHttpRequests(authorize -> authorize
 						.requestMatchers(HttpMethod.GET, "/api/courses", "/api/courses/**").permitAll()
+						.requestMatchers(signup, login, csrfToken).permitAll()
 						// Temporary until learner authentication and progress tracking are implemented.
 						.requestMatchers(quizSubmit).permitAll()
 						.anyRequest().authenticated())

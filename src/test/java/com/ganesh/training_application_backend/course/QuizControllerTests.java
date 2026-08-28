@@ -73,7 +73,7 @@ class QuizControllerTests {
 	@Test
 	void unrelatedPostRemainsProtected() throws Exception {
 		mockMvc.perform(post("/api/courses/1/modules/10/quiz").with(csrf()))
-				.andExpect(status().isForbidden());
+				.andExpect(status().isUnauthorized());
 	}
 
 	@Test
