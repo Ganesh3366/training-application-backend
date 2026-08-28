@@ -83,26 +83,36 @@ class DemoCourseDataSeederTests {
 				.doesNotContainNull();
 
 		ArgumentCaptor<Quiz> quizCaptor = ArgumentCaptor.forClass(Quiz.class);
-		verify(quizRepository).save(quizCaptor.capture());
-		assertThat(quizCaptor.getValue().getTitle()).isEqualTo("Angular Fundamentals Quiz");
-		assertThat(quizCaptor.getValue().getPassingScore()).isEqualTo(70);
-		assertThat(quizCaptor.getValue().getModule()).isSameAs(modules.get(0));
+		verify(quizRepository, org.mockito.Mockito.times(2)).save(quizCaptor.capture());
+		List<Quiz> quizzes = quizCaptor.getAllValues();
+		assertThat(quizzes).extracting(Quiz::getTitle)
+				.containsExactly("Angular Fundamentals Quiz", "Components and Templates Quiz");
+		assertThat(quizzes).extracting(Quiz::getPassingScore).containsExactly(70, 70);
+		assertThat(quizzes.get(0).getModule()).isSameAs(modules.get(0));
+		assertThat(quizzes.get(1).getModule()).isSameAs(modules.get(1));
 
 		ArgumentCaptor<QuizQuestion> questionCaptor = ArgumentCaptor.forClass(QuizQuestion.class);
-		verify(quizQuestionRepository, org.mockito.Mockito.times(3)).save(questionCaptor.capture());
+		verify(quizQuestionRepository, org.mockito.Mockito.times(6)).save(questionCaptor.capture());
 		List<QuizQuestion> questions = questionCaptor.getAllValues();
-		assertThat(questions).extracting(QuizQuestion::getPosition).containsExactly(1, 2, 3);
+		assertThat(questions).hasSize(6);
+		assertThat(questions.subList(0, 3)).extracting(QuizQuestion::getPosition).containsExactly(1, 2, 3);
+		assertThat(questions.subList(3, 6)).extracting(QuizQuestion::getPosition).containsExactly(1, 2, 3);
+		assertThat(questions.subList(0, 3)).allSatisfy(question ->
+				assertThat(question.getQuiz()).isSameAs(quizzes.get(0)));
+		assertThat(questions.subList(3, 6)).allSatisfy(question ->
+				assertThat(question.getQuiz()).isSameAs(quizzes.get(1)));
 
 		@SuppressWarnings("unchecked")
 		ArgumentCaptor<List<AnswerOption>> optionCaptor = ArgumentCaptor.forClass(List.class);
 		verify(answerOptionRepository).saveAll(optionCaptor.capture());
 		List<AnswerOption> options = optionCaptor.getValue();
-		assertThat(options).hasSize(12);
+		assertThat(options).hasSize(24);
 		assertThat(questions).allSatisfy(question -> {
 			List<AnswerOption> questionOptions = options.stream()
 					.filter(option -> option.getQuestion() == question)
 					.toList();
 			assertThat(questionOptions).hasSize(4);
+			assertThat(questionOptions).extracting(AnswerOption::getPosition).containsExactly(1, 2, 3, 4);
 			assertThat(questionOptions).filteredOn(AnswerOption::isCorrect).hasSize(1);
 		});
 	}
