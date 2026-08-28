@@ -39,6 +39,8 @@ public class SecurityConfig {
 	@Bean
 	SecurityFilterChain securityFilterChain(HttpSecurity http,
 			SecurityContextRepository securityContextRepository) throws Exception {
+		RequestMatcher quizRead = PathPatternRequestMatcher.pathPattern(
+				HttpMethod.GET, "/api/courses/{courseId}/modules/{moduleId}/quiz");
 		RequestMatcher quizSubmit = PathPatternRequestMatcher.pathPattern(
 				HttpMethod.POST, "/api/courses/{courseId}/modules/{moduleId}/quiz/submit");
 		RequestMatcher signup = PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/auth/signup");
@@ -55,13 +57,16 @@ public class SecurityConfig {
 				.csrf(csrf -> csrf
 						.csrfTokenRepository(csrfTokenRepository)
 						.spa()
-						.ignoringRequestMatchers(quizSubmit, signup, login))
+						.ignoringRequestMatchers(signup, login))
 				.exceptionHandling(exceptions -> exceptions.authenticationEntryPoint(unauthorized))
 				.authorizeHttpRequests(authorize -> authorize
-						.requestMatchers(HttpMethod.GET, "/api/courses", "/api/courses/**").permitAll()
 						.requestMatchers(signup, login, csrfToken).permitAll()
-						// Temporary until learner authentication and progress tracking are implemented.
-						.requestMatchers(quizSubmit).permitAll()
+						.requestMatchers(quizRead, quizSubmit).authenticated()
+						.requestMatchers(HttpMethod.GET,
+								"/api/courses",
+								"/api/courses/{courseId}",
+								"/api/courses/{courseId}/modules",
+								"/api/courses/{courseId}/modules/{moduleId}").permitAll()
 						.anyRequest().authenticated())
 				.build();
 	}

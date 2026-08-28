@@ -180,7 +180,7 @@ class AuthControllerTests {
 		mockMvc.perform(get("/api/courses"))
 				.andExpect(status().isNotFound());
 		mockMvc.perform(post("/api/courses/1/modules/10/quiz/submit"))
-				.andExpect(status().isNotFound());
+				.andExpect(status().isForbidden());
 	}
 
 	private MockHttpSession loginSession() throws Exception {

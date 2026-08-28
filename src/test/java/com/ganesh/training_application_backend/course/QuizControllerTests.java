@@ -16,6 +16,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.server.ResponseStatusException;
@@ -42,7 +43,14 @@ class QuizControllerTests {
 	}
 
 	@Test
-	void getsQuizWithoutAuthenticationAndDoesNotExposeCorrectAnswers() throws Exception {
+	void anonymousGetQuizIsUnauthorized() throws Exception {
+		mockMvc.perform(get("/api/courses/1/modules/10/quiz"))
+				.andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	@WithMockUser
+	void authenticatedUserGetsQuizWithoutExposingCorrectAnswers() throws Exception {
 		when(quizService.getQuiz(1L, 10L)).thenReturn(quizResponse());
 
 		mockMvc.perform(get("/api/courses/1/modules/10/quiz"))
@@ -55,12 +63,36 @@ class QuizControllerTests {
 	}
 
 	@Test
-	void submitsQuizWithoutAuthenticationOrCsrfToken() throws Exception {
+	void anonymousQuizSubmissionWithValidCsrfIsUnauthorized() throws Exception {
+		mockMvc.perform(post("/api/courses/1/modules/10/quiz/submit")
+				.with(csrf())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+						{"answers":[{"questionId":101,"optionId":1001}]}
+						"""))
+				.andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	@WithMockUser
+	void authenticatedQuizSubmissionWithoutCsrfIsForbidden() throws Exception {
+		mockMvc.perform(post("/api/courses/1/modules/10/quiz/submit")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+						{"answers":[{"questionId":101,"optionId":1001}]}
+						"""))
+				.andExpect(status().isForbidden());
+	}
+
+	@Test
+	@WithMockUser
+	void authenticatedQuizSubmissionWithValidCsrfSucceeds() throws Exception {
 		when(quizService.submitQuiz(org.mockito.ArgumentMatchers.eq(1L),
 				org.mockito.ArgumentMatchers.eq(10L), any(QuizSubmissionRequest.class)))
 				.thenReturn(new QuizResultResponse(3, 3, 100, 70, true));
 
 		mockMvc.perform(post("/api/courses/1/modules/10/quiz/submit")
+				.with(csrf())
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("""
 						{"answers":[{"questionId":101,"optionId":1001}],"score":0,"passed":false}
@@ -77,6 +109,7 @@ class QuizControllerTests {
 	}
 
 	@Test
+	@WithMockUser
 	void returnsNotFoundForWrongCourseQuiz() throws Exception {
 		when(quizService.getQuiz(2L, 10L))
 				.thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "Quiz not found"));
