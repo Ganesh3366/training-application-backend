@@ -19,12 +19,19 @@ public class DemoCourseDataSeeder implements ApplicationRunner {
 	private final CourseRepository courseRepository;
 	private final CourseModuleRepository courseModuleRepository;
 	private final ModuleContentRepository moduleContentRepository;
+	private final QuizRepository quizRepository;
+	private final QuizQuestionRepository quizQuestionRepository;
+	private final AnswerOptionRepository answerOptionRepository;
 
 	public DemoCourseDataSeeder(CourseRepository courseRepository, CourseModuleRepository courseModuleRepository,
-			ModuleContentRepository moduleContentRepository) {
+			ModuleContentRepository moduleContentRepository, QuizRepository quizRepository,
+			QuizQuestionRepository quizQuestionRepository, AnswerOptionRepository answerOptionRepository) {
 		this.courseRepository = courseRepository;
 		this.courseModuleRepository = courseModuleRepository;
 		this.moduleContentRepository = moduleContentRepository;
+		this.quizRepository = quizRepository;
+		this.quizQuestionRepository = quizQuestionRepository;
+		this.answerOptionRepository = answerOptionRepository;
 	}
 
 	@Override
@@ -99,6 +106,28 @@ public class DemoCourseDataSeeder implements ApplicationRunner {
 						"https://www.youtube.com/watch?v=3dHNOWTI7H8",
 						2)));
 
-		logger.info("Created SkillForge Angular demo course data");
+		Quiz quiz = quizRepository.save(new Quiz(null, fundamentals, "Angular Fundamentals Quiz", 70));
+		QuizQuestion languageQuestion = quizQuestionRepository.save(new QuizQuestion(
+				null, quiz, "What is the primary programming language used by Angular?", 1));
+		QuizQuestion componentQuestion = quizQuestionRepository.save(new QuizQuestion(
+				null, quiz, "What does an Angular component represent?", 2));
+		QuizQuestion injectionQuestion = quizQuestionRepository.save(new QuizQuestion(
+				null, quiz, "What is the purpose of dependency injection in Angular?", 3));
+
+		answerOptionRepository.saveAll(List.of(
+				new AnswerOption(null, languageQuestion, "TypeScript", true, 1),
+				new AnswerOption(null, languageQuestion, "Java", false, 2),
+				new AnswerOption(null, languageQuestion, "Python", false, 3),
+				new AnswerOption(null, languageQuestion, "C#", false, 4),
+				new AnswerOption(null, componentQuestion, "A reusable part of the user interface", true, 1),
+				new AnswerOption(null, componentQuestion, "A PostgreSQL table", false, 2),
+				new AnswerOption(null, componentQuestion, "A deployment server", false, 3),
+				new AnswerOption(null, componentQuestion, "A CSS preprocessor", false, 4),
+				new AnswerOption(null, injectionQuestion, "To provide dependencies to classes", true, 1),
+				new AnswerOption(null, injectionQuestion, "To compile HTML into SQL", false, 2),
+				new AnswerOption(null, injectionQuestion, "To replace component templates", false, 3),
+				new AnswerOption(null, injectionQuestion, "To store video files", false, 4)));
+
+		logger.info("Created SkillForge Angular demo course and quiz data");
 	}
 }

@@ -29,6 +29,15 @@ class DemoCourseDataSeederTests {
 	@Mock
 	private ModuleContentRepository moduleContentRepository;
 
+	@Mock
+	private QuizRepository quizRepository;
+
+	@Mock
+	private QuizQuestionRepository quizQuestionRepository;
+
+	@Mock
+	private AnswerOptionRepository answerOptionRepository;
+
 	@InjectMocks
 	private DemoCourseDataSeeder seeder;
 
@@ -37,6 +46,9 @@ class DemoCourseDataSeederTests {
 		when(courseRepository.count()).thenReturn(0L);
 		when(courseRepository.save(any(Course.class))).thenAnswer(invocation -> invocation.getArgument(0));
 		when(courseModuleRepository.save(any(CourseModule.class)))
+				.thenAnswer(invocation -> invocation.getArgument(0));
+		when(quizRepository.save(any(Quiz.class))).thenAnswer(invocation -> invocation.getArgument(0));
+		when(quizQuestionRepository.save(any(QuizQuestion.class)))
 				.thenAnswer(invocation -> invocation.getArgument(0));
 
 		seeder.run(new DefaultApplicationArguments(new String[0]));
@@ -69,6 +81,30 @@ class DemoCourseDataSeederTests {
 		assertThat(contents).filteredOn(content -> content.getType() == ModuleContentType.TEXT)
 				.extracting(ModuleContent::getTextContent)
 				.doesNotContainNull();
+
+		ArgumentCaptor<Quiz> quizCaptor = ArgumentCaptor.forClass(Quiz.class);
+		verify(quizRepository).save(quizCaptor.capture());
+		assertThat(quizCaptor.getValue().getTitle()).isEqualTo("Angular Fundamentals Quiz");
+		assertThat(quizCaptor.getValue().getPassingScore()).isEqualTo(70);
+		assertThat(quizCaptor.getValue().getModule()).isSameAs(modules.get(0));
+
+		ArgumentCaptor<QuizQuestion> questionCaptor = ArgumentCaptor.forClass(QuizQuestion.class);
+		verify(quizQuestionRepository, org.mockito.Mockito.times(3)).save(questionCaptor.capture());
+		List<QuizQuestion> questions = questionCaptor.getAllValues();
+		assertThat(questions).extracting(QuizQuestion::getPosition).containsExactly(1, 2, 3);
+
+		@SuppressWarnings("unchecked")
+		ArgumentCaptor<List<AnswerOption>> optionCaptor = ArgumentCaptor.forClass(List.class);
+		verify(answerOptionRepository).saveAll(optionCaptor.capture());
+		List<AnswerOption> options = optionCaptor.getValue();
+		assertThat(options).hasSize(12);
+		assertThat(questions).allSatisfy(question -> {
+			List<AnswerOption> questionOptions = options.stream()
+					.filter(option -> option.getQuestion() == question)
+					.toList();
+			assertThat(questionOptions).hasSize(4);
+			assertThat(questionOptions).filteredOn(AnswerOption::isCorrect).hasSize(1);
+		});
 	}
 
 	@Test
@@ -78,6 +114,7 @@ class DemoCourseDataSeederTests {
 		seeder.run(new DefaultApplicationArguments(new String[0]));
 
 		verify(courseRepository, never()).save(any(Course.class));
-		verifyNoInteractions(courseModuleRepository, moduleContentRepository);
+		verifyNoInteractions(courseModuleRepository, moduleContentRepository, quizRepository,
+				quizQuestionRepository, answerOptionRepository);
 	}
 }
