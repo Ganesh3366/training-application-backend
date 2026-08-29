@@ -12,4 +12,6 @@ public interface ModuleProgressRepository extends JpaRepository<ModuleProgress, 
 
 	@EntityGraph(attributePaths = "module")
 	List<ModuleProgress> findByUserIdAndModuleCourseId(Long userId, Long courseId);
+
+	boolean existsByModuleId(Long moduleId);
 }

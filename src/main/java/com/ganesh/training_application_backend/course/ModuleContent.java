@@ -53,6 +53,13 @@ public class ModuleContent {
 		this.position = position;
 	}
 
+	public void updateDetails(ModuleContentType type, String title, String textContent, String videoUrl) {
+		this.type = type;
+		this.title = title;
+		this.textContent = textContent;
+		this.videoUrl = videoUrl;
+	}
+
 	public Long getId() {
 		return id;
 	}

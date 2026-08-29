@@ -12,4 +12,6 @@ public interface CourseModuleRepository extends JpaRepository<CourseModule, Long
 	Optional<CourseModule> findByIdAndCourseId(Long id, Long courseId);
 
 	boolean existsByCourseId(Long courseId);
+
+	Optional<CourseModule> findTopByCourseIdOrderByPositionDesc(Long courseId);
 }
