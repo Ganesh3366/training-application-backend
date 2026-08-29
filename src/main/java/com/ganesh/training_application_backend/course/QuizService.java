@@ -1,5 +1,6 @@
 package com.ganesh.training_application_backend.course;
 
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -11,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.ganesh.training_application_backend.auth.AppUserRepository;
 import com.ganesh.training_application_backend.course.dto.AnswerOptionResponse;
 import com.ganesh.training_application_backend.course.dto.QuizAnswerRequest;
 import com.ganesh.training_application_backend.course.dto.QuizQuestionResponse;
@@ -24,12 +26,17 @@ public class QuizService {
 	private final QuizRepository quizRepository;
 	private final QuizQuestionRepository quizQuestionRepository;
 	private final AnswerOptionRepository answerOptionRepository;
+	private final ModuleProgressRepository moduleProgressRepository;
+	private final AppUserRepository appUserRepository;
 
 	public QuizService(QuizRepository quizRepository, QuizQuestionRepository quizQuestionRepository,
-			AnswerOptionRepository answerOptionRepository) {
+			AnswerOptionRepository answerOptionRepository, ModuleProgressRepository moduleProgressRepository,
+			AppUserRepository appUserRepository) {
 		this.quizRepository = quizRepository;
 		this.quizQuestionRepository = quizQuestionRepository;
 		this.answerOptionRepository = answerOptionRepository;
+		this.moduleProgressRepository = moduleProgressRepository;
+		this.appUserRepository = appUserRepository;
 	}
 
 	@Transactional(readOnly = true)
@@ -45,8 +52,8 @@ public class QuizService {
 		return new QuizResponse(quiz.getId(), quiz.getTitle(), quiz.getPassingScore(), questionResponses);
 	}
 
-	@Transactional(readOnly = true)
-	public QuizResultResponse submitQuiz(Long courseId, Long moduleId, QuizSubmissionRequest request) {
+	@Transactional
+	public QuizResultResponse submitQuiz(Long courseId, Long moduleId, QuizSubmissionRequest request, Long userId) {
 		Quiz quiz = findNestedQuiz(courseId, moduleId);
 		List<QuizQuestion> questions = quizQuestionRepository.findByQuizIdOrderByPositionAsc(quiz.getId());
 		if (questions.isEmpty()) {
@@ -68,12 +75,17 @@ public class QuizService {
 		}
 
 		int score = calculateScore(correctAnswers, questions.size());
+		boolean passed = score >= quiz.getPassingScore();
+		ModuleProgress progress = moduleProgressRepository.findByUserIdAndModuleId(userId, moduleId)
+				.orElseGet(() -> new ModuleProgress(appUserRepository.getReferenceById(userId), quiz.getModule()));
+		progress.recordAttempt(score, passed, Instant.now());
+		moduleProgressRepository.save(progress);
 		return new QuizResultResponse(
 				questions.size(),
 				correctAnswers,
 				score,
 				quiz.getPassingScore(),
-				score >= quiz.getPassingScore());
+				passed);
 	}
 
 	static int calculateScore(int correctAnswers, int totalQuestions) {

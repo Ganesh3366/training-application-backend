@@ -3,6 +3,7 @@ package com.ganesh.training_application_backend.course;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -22,6 +23,9 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.ganesh.training_application_backend.config.SecurityConfig;
+import com.ganesh.training_application_backend.auth.AppUser;
+import com.ganesh.training_application_backend.auth.AppUserPrincipal;
+import com.ganesh.training_application_backend.auth.Role;
 import com.ganesh.training_application_backend.course.dto.AnswerOptionResponse;
 import com.ganesh.training_application_backend.course.dto.QuizQuestionResponse;
 import com.ganesh.training_application_backend.course.dto.QuizResponse;
@@ -85,13 +89,14 @@ class QuizControllerTests {
 	}
 
 	@Test
-	@WithMockUser
 	void authenticatedQuizSubmissionWithValidCsrfSucceeds() throws Exception {
 		when(quizService.submitQuiz(org.mockito.ArgumentMatchers.eq(1L),
-				org.mockito.ArgumentMatchers.eq(10L), any(QuizSubmissionRequest.class)))
+				org.mockito.ArgumentMatchers.eq(10L), any(QuizSubmissionRequest.class),
+				org.mockito.ArgumentMatchers.eq(7L)))
 				.thenReturn(new QuizResultResponse(3, 3, 100, 70, true));
 
 		mockMvc.perform(post("/api/courses/1/modules/10/quiz/submit")
+				.with(user(principal()))
 				.with(csrf())
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("""
@@ -100,6 +105,10 @@ class QuizControllerTests {
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.score").value(100))
 				.andExpect(jsonPath("$.passed").value(true));
+	}
+
+	private AppUserPrincipal principal() {
+		return new AppUserPrincipal(new AppUser(7L, "Learner", "learner@example.com", "hash", Role.USER));
 	}
 
 	@Test

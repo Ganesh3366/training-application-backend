@@ -2,20 +2,26 @@ package com.ganesh.training_application_backend.course;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.ganesh.training_application_backend.auth.AppUser;
+import com.ganesh.training_application_backend.auth.Role;
 import com.ganesh.training_application_backend.course.dto.QuizAnswerRequest;
 import com.ganesh.training_application_backend.course.dto.QuizResponse;
 import com.ganesh.training_application_backend.course.dto.QuizResultResponse;
@@ -32,6 +38,12 @@ class QuizServiceTests {
 
 	@Mock
 	private AnswerOptionRepository answerOptionRepository;
+
+	@Mock
+	private ModuleProgressRepository moduleProgressRepository;
+
+	@Mock
+	private com.ganesh.training_application_backend.auth.AppUserRepository appUserRepository;
 
 	@InjectMocks
 	private QuizService quizService;
@@ -86,9 +98,17 @@ class QuizServiceTests {
 	void fullyCorrectSubmissionScoresOneHundredAndPasses() {
 		stubQuizData();
 
-		QuizResultResponse result = quizService.submitQuiz(1L, 10L, submission(1001L, 1003L, 1005L));
+		QuizResultResponse result = quizService.submitQuiz(1L, 10L, submission(1001L, 1003L, 1005L), 1L);
 
 		assertThat(result).isEqualTo(new QuizResultResponse(3, 3, 100, 70, true));
+		ArgumentCaptor<ModuleProgress> progressCaptor = ArgumentCaptor.forClass(ModuleProgress.class);
+		verify(moduleProgressRepository).save(progressCaptor.capture());
+		ModuleProgress progress = progressCaptor.getValue();
+		assertThat(progress.getAttemptsCount()).isEqualTo(1);
+		assertThat(progress.getLastScore()).isEqualTo(100);
+		assertThat(progress.getBestScore()).isEqualTo(100);
+		assertThat(progress.isCompleted()).isTrue();
+		assertThat(progress.getCompletedAt()).isNotNull();
 	}
 
 	@Test
@@ -107,7 +127,7 @@ class QuizServiceTests {
 				option(1006L, thirdQuestion, "Style templates", false, 2));
 		stubQuizData();
 
-		QuizResultResponse result = quizService.submitQuiz(1L, 10L, submission(1001L, 1003L, 1006L));
+		QuizResultResponse result = quizService.submitQuiz(1L, 10L, submission(1001L, 1003L, 1006L), 1L);
 
 		assertThat(result.score()).isEqualTo(67);
 		assertThat(result.correctAnswers()).isEqualTo(2);
@@ -118,10 +138,34 @@ class QuizServiceTests {
 	void belowPassingScoreDoesNotPass() {
 		stubQuizData();
 
-		QuizResultResponse result = quizService.submitQuiz(1L, 10L, submission(1001L, 1003L, 1006L));
+		QuizResultResponse result = quizService.submitQuiz(1L, 10L, submission(1001L, 1003L, 1006L), 1L);
 
 		assertThat(result.score()).isEqualTo(67);
 		assertThat(result.passed()).isFalse();
+	}
+
+	@Test
+	void lowerFailedRetryUpdatesExistingProgressWithoutRemovingCompletionOrBestScore() {
+		stubQuizData();
+		Long userId = 7L;
+		Instant firstCompletion = Instant.parse("2026-01-02T10:00:00Z");
+		AppUser user = new AppUser(userId, "Learner", "learner@example.com", "hash", Role.USER);
+		ModuleProgress existingProgress = new ModuleProgress(user, quiz.getModule());
+		existingProgress.recordAttempt(80, true, firstCompletion);
+		when(moduleProgressRepository.findByUserIdAndModuleId(userId, 10L))
+				.thenReturn(Optional.of(existingProgress));
+
+		QuizResultResponse result = quizService.submitQuiz(
+				1L, 10L, submission(1001L, 1003L, 1006L), userId);
+
+		assertThat(result.score()).isEqualTo(67);
+		assertThat(result.passed()).isFalse();
+		assertThat(existingProgress.getAttemptsCount()).isEqualTo(2);
+		assertThat(existingProgress.getLastScore()).isEqualTo(67);
+		assertThat(existingProgress.getBestScore()).isEqualTo(80);
+		assertThat(existingProgress.isCompleted()).isTrue();
+		assertThat(existingProgress.getCompletedAt()).isEqualTo(firstCompletion);
+		verify(moduleProgressRepository).save(existingProgress);
 	}
 
 	@Test
@@ -132,7 +176,8 @@ class QuizServiceTests {
 				new QuizAnswerRequest(101L, 1002L),
 				new QuizAnswerRequest(102L, 1003L)));
 
-		assertStatus(HttpStatus.BAD_REQUEST, () -> quizService.submitQuiz(1L, 10L, request));
+		assertStatus(HttpStatus.BAD_REQUEST, () -> quizService.submitQuiz(1L, 10L, request, 1L));
+		verifyNoInteractions(moduleProgressRepository);
 	}
 
 	@Test
@@ -141,7 +186,8 @@ class QuizServiceTests {
 		QuizSubmissionRequest request = new QuizSubmissionRequest(List.of(
 				new QuizAnswerRequest(101L, 1001L), new QuizAnswerRequest(102L, 1003L)));
 
-		assertStatus(HttpStatus.BAD_REQUEST, () -> quizService.submitQuiz(1L, 10L, request));
+		assertStatus(HttpStatus.BAD_REQUEST, () -> quizService.submitQuiz(1L, 10L, request, 1L));
+		verifyNoInteractions(moduleProgressRepository);
 	}
 
 	@Test
@@ -152,7 +198,8 @@ class QuizServiceTests {
 				new QuizAnswerRequest(102L, 1003L),
 				new QuizAnswerRequest(999L, 1005L)));
 
-		assertStatus(HttpStatus.BAD_REQUEST, () -> quizService.submitQuiz(1L, 10L, request));
+		assertStatus(HttpStatus.BAD_REQUEST, () -> quizService.submitQuiz(1L, 10L, request, 1L));
+		verifyNoInteractions(moduleProgressRepository);
 	}
 
 	@Test
@@ -160,7 +207,8 @@ class QuizServiceTests {
 		stubQuizData();
 
 		assertStatus(HttpStatus.BAD_REQUEST,
-				() -> quizService.submitQuiz(1L, 10L, submission(1003L, 1004L, 1006L)));
+				() -> quizService.submitQuiz(1L, 10L, submission(1003L, 1004L, 1006L), 1L));
+		verifyNoInteractions(moduleProgressRepository);
 	}
 
 	@Test
@@ -169,7 +217,8 @@ class QuizServiceTests {
 		when(quizQuestionRepository.findByQuizIdOrderByPositionAsc(20L)).thenReturn(List.of());
 
 		assertStatus(HttpStatus.BAD_REQUEST,
-				() -> quizService.submitQuiz(1L, 10L, new QuizSubmissionRequest(List.of())));
+				() -> quizService.submitQuiz(1L, 10L, new QuizSubmissionRequest(List.of()), 1L));
+		verifyNoInteractions(moduleProgressRepository);
 	}
 
 	@Test
@@ -177,7 +226,8 @@ class QuizServiceTests {
 		when(quizRepository.findByModuleIdAndModuleCourseId(10L, 1L)).thenReturn(Optional.of(quiz));
 		when(quizQuestionRepository.findByQuizIdOrderByPositionAsc(20L)).thenReturn(questions);
 
-		assertStatus(HttpStatus.BAD_REQUEST, () -> quizService.submitQuiz(1L, 10L, null));
+		assertStatus(HttpStatus.BAD_REQUEST, () -> quizService.submitQuiz(1L, 10L, null, 1L));
+		verifyNoInteractions(moduleProgressRepository);
 	}
 
 	private void stubQuizData() {

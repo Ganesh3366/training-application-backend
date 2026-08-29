@@ -43,6 +43,8 @@ public class SecurityConfig {
 				HttpMethod.GET, "/api/courses/{courseId}/modules/{moduleId}/quiz");
 		RequestMatcher quizSubmit = PathPatternRequestMatcher.pathPattern(
 				HttpMethod.POST, "/api/courses/{courseId}/modules/{moduleId}/quiz/submit");
+		RequestMatcher courseProgress = PathPatternRequestMatcher.pathPattern(
+				HttpMethod.GET, "/api/courses/{courseId}/progress");
 		RequestMatcher signup = PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/auth/signup");
 		RequestMatcher login = PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/auth/login");
 		RequestMatcher csrfToken = PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/auth/csrf");
@@ -61,7 +63,7 @@ public class SecurityConfig {
 				.exceptionHandling(exceptions -> exceptions.authenticationEntryPoint(unauthorized))
 				.authorizeHttpRequests(authorize -> authorize
 						.requestMatchers(signup, login, csrfToken).permitAll()
-						.requestMatchers(quizRead, quizSubmit).authenticated()
+						.requestMatchers(quizRead, quizSubmit, courseProgress).authenticated()
 						.requestMatchers(HttpMethod.GET,
 								"/api/courses",
 								"/api/courses/{courseId}",
