@@ -51,6 +51,16 @@ public class Course {
 		this.category = category;
 	}
 
+	public void updateDetails(String title, String description, String instructor, Integer duration,
+			CourseLevel level, CourseCategory category) {
+		this.title = title;
+		this.description = description;
+		this.instructor = instructor;
+		this.duration = duration;
+		this.level = level;
+		this.category = category;
+	}
+
 	public Long getId() {
 		return id;
 	}
