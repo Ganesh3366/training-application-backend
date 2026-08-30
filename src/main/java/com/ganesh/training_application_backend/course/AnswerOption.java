@@ -61,4 +61,13 @@ public class AnswerOption {
 	public Integer getPosition() {
 		return position;
 	}
+
+	public void updateDetails(String optionText, boolean correct) {
+		this.optionText = optionText;
+		this.correct = correct;
+	}
+
+	public void clearCorrect() {
+		this.correct = false;
+	}
 }

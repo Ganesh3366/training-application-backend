@@ -56,4 +56,12 @@ public class Quiz {
 	public Integer getPassingScore() {
 		return passingScore;
 	}
+
+	public void updateDetails(String title, Integer passingScore) {
+		if (passingScore == null || passingScore < 0 || passingScore > 100) {
+			throw new IllegalArgumentException("Passing score must be between 0 and 100");
+		}
+		this.title = title;
+		this.passingScore = passingScore;
+	}
 }

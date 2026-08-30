@@ -170,7 +170,7 @@ class QuizServiceTests {
 
 	@Test
 	void rejectsDuplicateQuestionAnswers() {
-		stubQuizQuestions();
+		stubQuizData();
 		QuizSubmissionRequest request = new QuizSubmissionRequest(List.of(
 				new QuizAnswerRequest(101L, 1001L),
 				new QuizAnswerRequest(101L, 1002L),
@@ -182,7 +182,7 @@ class QuizServiceTests {
 
 	@Test
 	void rejectsMissingAnswer() {
-		stubQuizQuestions();
+		stubQuizData();
 		QuizSubmissionRequest request = new QuizSubmissionRequest(List.of(
 				new QuizAnswerRequest(101L, 1001L), new QuizAnswerRequest(102L, 1003L)));
 
@@ -192,7 +192,7 @@ class QuizServiceTests {
 
 	@Test
 	void rejectsExtraOrForeignQuestion() {
-		stubQuizQuestions();
+		stubQuizData();
 		QuizSubmissionRequest request = new QuizSubmissionRequest(List.of(
 				new QuizAnswerRequest(101L, 1001L),
 				new QuizAnswerRequest(102L, 1003L),
@@ -216,17 +216,103 @@ class QuizServiceTests {
 		when(quizRepository.findByModuleIdAndModuleCourseId(10L, 1L)).thenReturn(Optional.of(quiz));
 		when(quizQuestionRepository.findByQuizIdOrderByPositionAsc(20L)).thenReturn(List.of());
 
-		assertStatus(HttpStatus.BAD_REQUEST,
+		assertStatus(HttpStatus.CONFLICT,
 				() -> quizService.submitQuiz(1L, 10L, new QuizSubmissionRequest(List.of()), 1L));
 		verifyNoInteractions(moduleProgressRepository);
 	}
 
 	@Test
 	void rejectsNullSubmissionSafely() {
-		when(quizRepository.findByModuleIdAndModuleCourseId(10L, 1L)).thenReturn(Optional.of(quiz));
-		when(quizQuestionRepository.findByQuizIdOrderByPositionAsc(20L)).thenReturn(questions);
+		stubQuizData();
 
 		assertStatus(HttpStatus.BAD_REQUEST, () -> quizService.submitQuiz(1L, 10L, null, 1L));
+		verifyNoInteractions(moduleProgressRepository);
+	}
+
+	@Test
+	void rejectsQuestionWithFewerThanTwoOptionsAsIncompleteConfiguration() {
+		stubQuizQuestions();
+		when(answerOptionRepository.findByQuestionIdInOrderByQuestionIdAscPositionAsc(List.of(101L, 102L, 103L)))
+				.thenReturn(List.of(option(1001L, firstQuestion, "TypeScript", true, 1)));
+
+		assertStatus(HttpStatus.CONFLICT, () -> quizService.getQuiz(1L, 10L));
+	}
+
+	@Test
+	void rejectsMultipleCorrectOptionsAsIncompleteConfiguration() {
+		stubQuizQuestions();
+		List<AnswerOption> invalidOptions = new java.util.ArrayList<>(options);
+		invalidOptions.set(1, option(1002L, firstQuestion, "COBOL", true, 2));
+		when(answerOptionRepository.findByQuestionIdInOrderByQuestionIdAscPositionAsc(List.of(101L, 102L, 103L)))
+				.thenReturn(invalidOptions);
+
+		assertStatus(HttpStatus.CONFLICT,
+				() -> quizService.submitQuiz(1L, 10L, submission(1001L, 1003L, 1005L), 1L));
+		verifyNoInteractions(moduleProgressRepository);
+	}
+
+	@Test
+	void rejectsEmptyQuizOnGetAsIncompleteConfiguration() {
+		when(quizRepository.findByModuleIdAndModuleCourseId(10L, 1L)).thenReturn(Optional.of(quiz));
+		when(quizQuestionRepository.findByQuizIdOrderByPositionAsc(20L)).thenReturn(List.of());
+
+		assertStatus(HttpStatus.CONFLICT, () -> quizService.getQuiz(1L, 10L));
+	}
+
+	@Test
+	void rejectsZeroCorrectAnswersOnGetAsIncompleteConfiguration() {
+		List<QuizQuestion> oneQuestion = List.of(firstQuestion);
+		List<AnswerOption> noCorrectOptions = List.of(
+				option(1001L, firstQuestion, "TypeScript", false, 1),
+				option(1002L, firstQuestion, "COBOL", false, 2));
+		when(quizRepository.findByModuleIdAndModuleCourseId(10L, 1L)).thenReturn(Optional.of(quiz));
+		when(quizQuestionRepository.findByQuizIdOrderByPositionAsc(20L)).thenReturn(oneQuestion);
+		when(answerOptionRepository.findByQuestionIdInOrderByQuestionIdAscPositionAsc(List.of(101L)))
+				.thenReturn(noCorrectOptions);
+
+		assertStatus(HttpStatus.CONFLICT, () -> quizService.getQuiz(1L, 10L));
+	}
+
+	@Test
+	void rejectsFewerThanTwoOptionsOnSubmissionBeforeProgressChanges() {
+		List<QuizQuestion> oneQuestion = List.of(firstQuestion);
+		when(quizRepository.findByModuleIdAndModuleCourseId(10L, 1L)).thenReturn(Optional.of(quiz));
+		when(quizQuestionRepository.findByQuizIdOrderByPositionAsc(20L)).thenReturn(oneQuestion);
+		when(answerOptionRepository.findByQuestionIdInOrderByQuestionIdAscPositionAsc(List.of(101L)))
+				.thenReturn(List.of(option(1001L, firstQuestion, "TypeScript", true, 1)));
+
+		assertStatus(HttpStatus.CONFLICT, () -> quizService.submitQuiz(1L, 10L,
+				new QuizSubmissionRequest(List.of(new QuizAnswerRequest(101L, 1001L))), 1L));
+		verifyNoInteractions(moduleProgressRepository);
+	}
+
+	@Test
+	void rejectsMultipleCorrectOptionsOnGetAsIncompleteConfiguration() {
+		List<QuizQuestion> oneQuestion = List.of(firstQuestion);
+		List<AnswerOption> multipleCorrectOptions = List.of(
+				option(1001L, firstQuestion, "TypeScript", true, 1),
+				option(1002L, firstQuestion, "COBOL", true, 2));
+		when(quizRepository.findByModuleIdAndModuleCourseId(10L, 1L)).thenReturn(Optional.of(quiz));
+		when(quizQuestionRepository.findByQuizIdOrderByPositionAsc(20L)).thenReturn(oneQuestion);
+		when(answerOptionRepository.findByQuestionIdInOrderByQuestionIdAscPositionAsc(List.of(101L)))
+				.thenReturn(multipleCorrectOptions);
+
+		assertStatus(HttpStatus.CONFLICT, () -> quizService.getQuiz(1L, 10L));
+	}
+
+	@Test
+	void rejectsZeroCorrectAnswersOnSubmissionBeforeProgressChanges() {
+		List<QuizQuestion> oneQuestion = List.of(firstQuestion);
+		List<AnswerOption> noCorrectOptions = List.of(
+				option(1001L, firstQuestion, "TypeScript", false, 1),
+				option(1002L, firstQuestion, "COBOL", false, 2));
+		when(quizRepository.findByModuleIdAndModuleCourseId(10L, 1L)).thenReturn(Optional.of(quiz));
+		when(quizQuestionRepository.findByQuizIdOrderByPositionAsc(20L)).thenReturn(oneQuestion);
+		when(answerOptionRepository.findByQuestionIdInOrderByQuestionIdAscPositionAsc(List.of(101L)))
+				.thenReturn(noCorrectOptions);
+
+		assertStatus(HttpStatus.CONFLICT, () -> quizService.submitQuiz(1L, 10L,
+				new QuizSubmissionRequest(List.of(new QuizAnswerRequest(101L, 1001L))), 1L));
 		verifyNoInteractions(moduleProgressRepository);
 	}
 

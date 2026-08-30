@@ -53,4 +53,8 @@ public class QuizQuestion {
 	public Integer getPosition() {
 		return position;
 	}
+
+	public void updateDetails(String questionText) {
+		this.questionText = questionText;
+	}
 }

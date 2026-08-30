@@ -28,6 +28,7 @@ public class QuizService {
 	private final AnswerOptionRepository answerOptionRepository;
 	private final ModuleProgressRepository moduleProgressRepository;
 	private final AppUserRepository appUserRepository;
+	private final QuizConfigurationValidator configurationValidator = new QuizConfigurationValidator();
 
 	public QuizService(QuizRepository quizRepository, QuizQuestionRepository quizQuestionRepository,
 			AnswerOptionRepository answerOptionRepository, ModuleProgressRepository moduleProgressRepository,
@@ -44,6 +45,7 @@ public class QuizService {
 		Quiz quiz = findNestedQuiz(courseId, moduleId);
 		List<QuizQuestion> questions = quizQuestionRepository.findByQuizIdOrderByPositionAsc(quiz.getId());
 		Map<Long, List<AnswerOption>> optionsByQuestion = loadOptionsByQuestion(questions);
+		configurationValidator.requireUsable(questions, optionsByQuestion);
 
 		List<QuizQuestionResponse> questionResponses = questions.stream()
 				.map(question -> toQuestionResponse(question, optionsByQuestion.getOrDefault(question.getId(), List.of())))
@@ -56,13 +58,10 @@ public class QuizService {
 	public QuizResultResponse submitQuiz(Long courseId, Long moduleId, QuizSubmissionRequest request, Long userId) {
 		Quiz quiz = findNestedQuiz(courseId, moduleId);
 		List<QuizQuestion> questions = quizQuestionRepository.findByQuizIdOrderByPositionAsc(quiz.getId());
-		if (questions.isEmpty()) {
-			throw badRequest("Quiz has no questions");
-		}
-
+		Map<Long, List<AnswerOption>> optionsByQuestion = loadOptionsByQuestion(questions);
+		configurationValidator.requireUsable(questions, optionsByQuestion);
 		List<QuizAnswerRequest> answers = requireAnswers(request);
 		Map<Long, QuizAnswerRequest> answersByQuestion = validateQuestionAnswers(questions, answers);
-		Map<Long, List<AnswerOption>> optionsByQuestion = loadOptionsByQuestion(questions);
 
 		int correctAnswers = 0;
 		for (QuizQuestion question : questions) {
