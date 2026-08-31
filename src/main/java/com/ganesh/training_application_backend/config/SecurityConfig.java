@@ -65,6 +65,7 @@ public class SecurityConfig {
 				.exceptionHandling(exceptions -> exceptions.authenticationEntryPoint(unauthorized))
 				.authorizeHttpRequests(authorize -> authorize
 						.requestMatchers(signup, login, csrfToken).permitAll()
+						.requestMatchers("/api/admin/**").hasRole("ADMIN")
 						.requestMatchers("/api/management/**").hasAnyRole("ADMIN", "INSTRUCTOR")
 						.requestMatchers(quizRead, quizSubmit, courseProgress, courseCertificate).authenticated()
 						.requestMatchers(HttpMethod.GET,

@@ -21,6 +21,7 @@ import org.springframework.web.server.ResponseStatusException;
 import com.ganesh.training_application_backend.course.dto.CourseCreateRequest;
 import com.ganesh.training_application_backend.course.dto.CourseManagementResponse;
 import com.ganesh.training_application_backend.course.dto.CourseUpdateRequest;
+import com.ganesh.training_application_backend.admin.CourseAssignmentRepository;
 
 @ExtendWith(MockitoExtension.class)
 class CourseManagementServiceTests {
@@ -28,6 +29,7 @@ class CourseManagementServiceTests {
 	@Mock CourseRepository courseRepository;
 	@Mock CourseModuleRepository courseModuleRepository;
 	@Mock CertificateRepository certificateRepository;
+	@Mock CourseAssignmentRepository courseAssignmentRepository;
 	@InjectMocks CourseManagementService service;
 
 	@Test
@@ -102,6 +104,16 @@ class CourseManagementServiceTests {
 		Course course = course(1L);
 		when(courseRepository.findById(1L)).thenReturn(Optional.of(course));
 		when(certificateRepository.existsByCourseId(1L)).thenReturn(true);
+
+		assertStatus(HttpStatus.CONFLICT, () -> service.deleteCourse(1L));
+		verify(courseRepository, never()).delete(course);
+	}
+
+	@Test
+	void rejectsDeletionWhenCourseIsAssigned() {
+		Course course = course(1L);
+		when(courseRepository.findById(1L)).thenReturn(Optional.of(course));
+		when(courseAssignmentRepository.existsByCourseId(1L)).thenReturn(true);
 
 		assertStatus(HttpStatus.CONFLICT, () -> service.deleteCourse(1L));
 		verify(courseRepository, never()).delete(course);

@@ -10,6 +10,7 @@ import org.springframework.web.server.ResponseStatusException;
 import com.ganesh.training_application_backend.course.dto.CourseCreateRequest;
 import com.ganesh.training_application_backend.course.dto.CourseManagementResponse;
 import com.ganesh.training_application_backend.course.dto.CourseUpdateRequest;
+import com.ganesh.training_application_backend.admin.CourseAssignmentRepository;
 
 @Service
 public class CourseManagementService {
@@ -17,12 +18,15 @@ public class CourseManagementService {
 	private final CourseRepository courseRepository;
 	private final CourseModuleRepository courseModuleRepository;
 	private final CertificateRepository certificateRepository;
+	private final CourseAssignmentRepository courseAssignmentRepository;
 
 	public CourseManagementService(CourseRepository courseRepository,
-			CourseModuleRepository courseModuleRepository, CertificateRepository certificateRepository) {
+			CourseModuleRepository courseModuleRepository, CertificateRepository certificateRepository,
+			CourseAssignmentRepository courseAssignmentRepository) {
 		this.courseRepository = courseRepository;
 		this.courseModuleRepository = courseModuleRepository;
 		this.certificateRepository = certificateRepository;
+		this.courseAssignmentRepository = courseAssignmentRepository;
 	}
 
 	@Transactional(readOnly = true)
@@ -53,7 +57,8 @@ public class CourseManagementService {
 	@Transactional
 	public void deleteCourse(Long courseId) {
 		Course course = findCourse(courseId);
-		if (courseModuleRepository.existsByCourseId(courseId) || certificateRepository.existsByCourseId(courseId)) {
+		if (courseModuleRepository.existsByCourseId(courseId) || certificateRepository.existsByCourseId(courseId)
+				|| courseAssignmentRepository.existsByCourseId(courseId)) {
 			throw new ResponseStatusException(HttpStatus.CONFLICT, "Course has dependent records");
 		}
 		courseRepository.delete(course);
