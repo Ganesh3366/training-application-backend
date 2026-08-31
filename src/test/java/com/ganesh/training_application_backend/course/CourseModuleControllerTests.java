@@ -12,6 +12,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.server.ResponseStatusException;
@@ -48,7 +49,14 @@ class CourseModuleControllerTests {
 	}
 
 	@Test
-	void getsModuleDetailWithTextAndVideoContentWithoutAuthentication() throws Exception {
+	void rejectsModuleDetailWithoutAuthentication() throws Exception {
+		mockMvc.perform(get("/api/courses/1/modules/10"))
+				.andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	@WithMockUser
+	void authenticatedUserGetsModuleDetailWithTextAndVideoContent() throws Exception {
 		when(courseModuleService.getModuleById(1L, 10L)).thenReturn(moduleResponse());
 
 		mockMvc.perform(get("/api/courses/1/modules/10"))
@@ -64,6 +72,7 @@ class CourseModuleControllerTests {
 	}
 
 	@Test
+	@WithMockUser
 	void returnsNotFoundForUnknownOrWrongCourseModule() throws Exception {
 		when(courseModuleService.getModuleById(2L, 10L))
 				.thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "Course module not found"));

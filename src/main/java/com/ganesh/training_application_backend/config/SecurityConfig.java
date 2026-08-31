@@ -47,6 +47,8 @@ public class SecurityConfig {
 				HttpMethod.GET, "/api/courses/{courseId}/progress");
 		RequestMatcher courseCertificate = PathPatternRequestMatcher.pathPattern(
 				HttpMethod.GET, "/api/courses/{courseId}/certificate");
+		RequestMatcher courseModuleDetail = PathPatternRequestMatcher.pathPattern(
+				HttpMethod.GET, "/api/courses/{courseId}/modules/{moduleId}");
 		RequestMatcher signup = PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/auth/signup");
 		RequestMatcher login = PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/auth/login");
 		RequestMatcher csrfToken = PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/auth/csrf");
@@ -67,12 +69,12 @@ public class SecurityConfig {
 						.requestMatchers(signup, login, csrfToken).permitAll()
 						.requestMatchers("/api/admin/**").hasRole("ADMIN")
 						.requestMatchers("/api/management/**").hasAnyRole("ADMIN", "INSTRUCTOR")
-						.requestMatchers(quizRead, quizSubmit, courseProgress, courseCertificate).authenticated()
+						.requestMatchers(quizRead, quizSubmit, courseProgress, courseCertificate, courseModuleDetail)
+								.authenticated()
 						.requestMatchers(HttpMethod.GET,
 								"/api/courses",
 								"/api/courses/{courseId}",
-								"/api/courses/{courseId}/modules",
-								"/api/courses/{courseId}/modules/{moduleId}").permitAll()
+								"/api/courses/{courseId}/modules").permitAll()
 						.anyRequest().authenticated())
 				.build();
 	}
