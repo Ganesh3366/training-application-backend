@@ -49,6 +49,8 @@ class LearnerProgressReportServiceTests {
 		assertThat(response.learnerId()).isEqualTo(7L);
 		assertThat(response.learnerName()).isEqualTo("Learner");
 		assertThat(response.learnerEmail()).isEqualTo("learner@example.com");
+		assertThat(response.assigned()).isTrue();
+		assertThat(response.assignedAt()).isEqualTo(Instant.parse("2025-12-01T10:00:00Z"));
 		assertThat(response.status()).isEqualTo(CourseProgressStatus.NOT_STARTED);
 		assertThat(response.completedModules()).isZero();
 		assertThat(response.pendingModules()).isEqualTo(2);
@@ -93,6 +95,8 @@ class LearnerProgressReportServiceTests {
 
 		assertThat(response.learnerId()).isEqualTo(data.learner().getId());
 		assertThat(response.courseId()).isEqualTo(data.course().getId());
+		assertThat(response.assigned()).isFalse();
+		assertThat(response.assignedAt()).isNull();
 		assertThat(response.status()).isEqualTo(CourseProgressStatus.IN_PROGRESS);
 		assertThat(response.progressPercentage()).isZero();
 		assertThat(response.completedModules()).isZero();
@@ -116,6 +120,8 @@ class LearnerProgressReportServiceTests {
 		assertThat(responses).hasSize(1);
 		assertThat(responses.get(0).learnerId()).isEqualTo(data.learner().getId());
 		assertThat(responses.get(0).courseId()).isEqualTo(data.course().getId());
+		assertThat(responses.get(0).assigned()).isTrue();
+		assertThat(responses.get(0).assignedAt()).isEqualTo(data.assignment().getAssignedAt());
 		assertThat(responses.get(0).modules().get(0).attemptCount()).isEqualTo(1);
 	}
 

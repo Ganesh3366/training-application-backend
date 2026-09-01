@@ -1,5 +1,6 @@
 package com.ganesh.training_application_backend.reporting;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
@@ -53,9 +54,10 @@ public class LearnerProgressReportService {
 
 		Map<LearnerCourseKey, LearnerCourseSource> reportSources = new LinkedHashMap<>();
 		assignments.forEach(assignment -> reportSources.putIfAbsent(keyFor(assignment),
-				new LearnerCourseSource(assignment.getUser(), assignment.getCourse())));
+				new LearnerCourseSource(assignment.getUser(), assignment.getCourse(), true,
+						assignment.getAssignedAt())));
 		progressRecords.forEach(progress -> reportSources.putIfAbsent(keyFor(progress),
-				new LearnerCourseSource(progress.getUser(), progress.getModule().getCourse())));
+				new LearnerCourseSource(progress.getUser(), progress.getModule().getCourse(), false, null)));
 
 		Set<Long> learnerIds = reportSources.values().stream().map(source -> source.learner().getId())
 				.collect(Collectors.toSet());
@@ -90,6 +92,7 @@ public class LearnerProgressReportService {
 
 		return new LearnerCourseReportResponse(source.learner().getId(), source.learner().getName(),
 				source.learner().getEmail(), source.course().getId(), source.course().getTitle(),
+				source.assigned(), source.assignedAt(),
 				completed, total, total - completed, percentage, status, completionDate,
 				certificate == null ? null : certificate.getCertificateNumber(), moduleResponses);
 	}
@@ -130,6 +133,7 @@ public class LearnerProgressReportService {
 	private record LearnerCourseKey(Long learnerId, Long courseId) {
 	}
 
-	private record LearnerCourseSource(AppUser learner, Course course) {
+	private record LearnerCourseSource(AppUser learner, Course course, boolean assigned,
+			Instant assignedAt) {
 	}
 }

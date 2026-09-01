@@ -1,5 +1,6 @@
 package com.ganesh.training_application_backend.reporting.dto;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -11,6 +12,8 @@ public record LearnerCourseReportResponse(
 		String learnerEmail,
 		Long courseId,
 		String courseTitle,
+		boolean assigned,
+		Instant assignedAt,
 		int completedModules,
 		int totalModules,
 		int pendingModules,

@@ -1,11 +1,13 @@
 package com.ganesh.training_application_backend.reporting;
 
+import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.time.Instant;
 import java.util.List;
 
 import org.junit.jupiter.api.Test;
@@ -45,6 +47,8 @@ class LearnerProgressReportControllerTests {
 		mockMvc.perform(get("/api/management/reports/learner-courses").with(user(principal(Role.ADMIN))))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$[0].learnerEmail").value("learner@example.com"))
+				.andExpect(jsonPath("$[0].assigned").value(true))
+				.andExpect(jsonPath("$[0].assignedAt").value("2025-12-01T10:00:00Z"))
 				.andExpect(jsonPath("$[0].status").value("IN_PROGRESS"))
 				.andExpect(jsonPath("$[0].modules[0].attemptCount").value(2))
 				.andExpect(jsonPath("$[0].password").doesNotExist())
@@ -62,6 +66,8 @@ class LearnerProgressReportControllerTests {
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$[0].learnerId").value(7))
 				.andExpect(jsonPath("$[0].courseId").value(1))
+				.andExpect(jsonPath("$[0].assigned").value(false))
+				.andExpect(jsonPath("$[0].assignedAt").value(nullValue()))
 				.andExpect(jsonPath("$[0].status").value("IN_PROGRESS"))
 				.andExpect(jsonPath("$[0].modules[0].moduleId").value(10))
 				.andExpect(jsonPath("$[0].modules[0].completed").value(false))
@@ -72,12 +78,14 @@ class LearnerProgressReportControllerTests {
 
 	private LearnerCourseReportResponse report() {
 		return new LearnerCourseReportResponse(7L, "Learner", "learner@example.com", 1L, "Course",
+				true, Instant.parse("2025-12-01T10:00:00Z"),
 				1, 2, 1, 50, CourseProgressStatus.IN_PROGRESS, null, null,
 				List.of(new LearnerModuleReportResponse(10L, "First", true, 70, 90, 2, null)));
 	}
 
 	private LearnerCourseReportResponse failedAttemptReport() {
 		return new LearnerCourseReportResponse(7L, "Learner", "learner@example.com", 1L, "Course",
+				false, null,
 				0, 2, 2, 0, CourseProgressStatus.IN_PROGRESS, null, null,
 				List.of(new LearnerModuleReportResponse(10L, "First", false, 40, 60, 2, null)));
 	}
