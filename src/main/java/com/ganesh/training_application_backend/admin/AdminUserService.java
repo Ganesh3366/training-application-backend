@@ -6,10 +6,12 @@ import java.util.List;
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.ganesh.training_application_backend.admin.dto.AdminUserCreateRequest;
 import com.ganesh.training_application_backend.admin.dto.CourseAssignmentRequest;
 import com.ganesh.training_application_backend.admin.dto.CourseAssignmentResponse;
 import com.ganesh.training_application_backend.auth.AppUser;
@@ -25,17 +27,36 @@ public class AdminUserService {
 	private final AppUserRepository userRepository;
 	private final CourseRepository courseRepository;
 	private final CourseAssignmentRepository assignmentRepository;
+	private final PasswordEncoder passwordEncoder;
 
 	public AdminUserService(AppUserRepository userRepository, CourseRepository courseRepository,
-			CourseAssignmentRepository assignmentRepository) {
+			CourseAssignmentRepository assignmentRepository, PasswordEncoder passwordEncoder) {
 		this.userRepository = userRepository;
 		this.courseRepository = courseRepository;
 		this.assignmentRepository = assignmentRepository;
+		this.passwordEncoder = passwordEncoder;
 	}
 
 	@Transactional(readOnly = true)
 	public List<UserResponse> getUsers() {
 		return userRepository.findAllByOrderByIdAsc().stream().map(this::toUserResponse).toList();
+	}
+
+	@Transactional
+	public UserResponse createUser(AdminUserCreateRequest request) {
+		String email = AppUser.normalizeEmail(request.email());
+		if (userRepository.existsByEmail(email)) {
+			throw duplicateEmail();
+		}
+
+		String name = request.firstName().trim() + " " + request.lastName().trim();
+		AppUser user = new AppUser(null, name, email, passwordEncoder.encode(request.password()), request.role());
+		try {
+			return toUserResponse(userRepository.saveAndFlush(user));
+		} catch (DataIntegrityViolationException exception) {
+			if (isDuplicateEmail(exception)) throw duplicateEmail();
+			throw exception;
+		}
 	}
 
 	@Transactional(readOnly = true)
@@ -84,8 +105,21 @@ public class AdminUserService {
 		return false;
 	}
 
+	private boolean isDuplicateEmail(Throwable exception) {
+		for (Throwable cause = exception; cause != null; cause = cause.getCause()) {
+			if (cause.getMessage() == null) continue;
+			String message = cause.getMessage().toLowerCase();
+			if (message.contains("key (email)") || message.contains("app_users_email")) return true;
+		}
+		return false;
+	}
+
 	private ResponseStatusException duplicateAssignment() {
 		return new ResponseStatusException(HttpStatus.CONFLICT, "Course is already assigned to this user");
+	}
+
+	private ResponseStatusException duplicateEmail() {
+		return new ResponseStatusException(HttpStatus.CONFLICT, "An account with this email already exists");
 	}
 
 	private UserResponse toUserResponse(AppUser user) {

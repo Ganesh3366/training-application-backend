@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.ganesh.training_application_backend.admin.dto.AdminUserCreateRequest;
 import com.ganesh.training_application_backend.admin.dto.CourseAssignmentRequest;
 import com.ganesh.training_application_backend.admin.dto.CourseAssignmentResponse;
 import com.ganesh.training_application_backend.auth.dto.UserResponse;
@@ -29,6 +30,12 @@ public class AdminUserController {
 
 	@GetMapping
 	public List<UserResponse> getUsers() { return service.getUsers(); }
+
+	@PostMapping
+	public ResponseEntity<UserResponse> createUser(@Valid @RequestBody AdminUserCreateRequest request) {
+		UserResponse response = service.createUser(request);
+		return ResponseEntity.created(URI.create("/api/admin/users/" + response.id())).body(response);
+	}
 
 	@GetMapping("/{userId}")
 	public UserResponse getUser(@PathVariable Long userId) { return service.getUser(userId); }

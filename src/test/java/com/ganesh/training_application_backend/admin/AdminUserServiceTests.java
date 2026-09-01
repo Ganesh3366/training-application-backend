@@ -13,14 +13,18 @@ import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.ganesh.training_application_backend.admin.dto.AdminUserCreateRequest;
 import com.ganesh.training_application_backend.admin.dto.CourseAssignmentRequest;
 import com.ganesh.training_application_backend.auth.AppUser;
 import com.ganesh.training_application_backend.auth.AppUserRepository;
@@ -36,7 +40,76 @@ class AdminUserServiceTests {
 	@Mock AppUserRepository userRepository;
 	@Mock CourseRepository courseRepository;
 	@Mock CourseAssignmentRepository assignmentRepository;
+	@Mock PasswordEncoder passwordEncoder;
 	@InjectMocks AdminUserService service;
+
+	@ParameterizedTest
+	@EnumSource(Role.class)
+	void createsUsersForEveryAllowedRoleWithNormalizedIdentityAndEncodedPassword(Role role) {
+		AdminUserCreateRequest request = new AdminUserCreateRequest(
+				"  Ada ", " Lovelace  ", "  ADA@Example.COM ", "strong-password", role);
+		when(passwordEncoder.encode("strong-password")).thenReturn("encoded-password");
+		when(userRepository.saveAndFlush(any())).thenAnswer(invocation -> {
+			AppUser saved = invocation.getArgument(0);
+			return new AppUser(42L, saved.getName(), saved.getEmail(), saved.getPasswordHash(), saved.getRole());
+		});
+
+		var response = service.createUser(request);
+
+		ArgumentCaptor<AppUser> captor = ArgumentCaptor.forClass(AppUser.class);
+		verify(userRepository).existsByEmail("ada@example.com");
+		verify(userRepository).saveAndFlush(captor.capture());
+		AppUser persisted = captor.getValue();
+		assertThat(persisted.getName()).isEqualTo("Ada Lovelace");
+		assertThat(persisted.getEmail()).isEqualTo("ada@example.com");
+		assertThat(persisted.getRole()).isEqualTo(role);
+		assertThat(persisted.getPasswordHash()).isEqualTo("encoded-password").isNotEqualTo(request.password());
+		verify(passwordEncoder).encode("strong-password");
+		assertThat(response.id()).isEqualTo(42L);
+		assertThat(response.name()).isEqualTo("Ada Lovelace");
+		assertThat(response.email()).isEqualTo("ada@example.com");
+		assertThat(response.role()).isEqualTo(role);
+	}
+
+	@Test
+	void rejectsPreExistingDuplicateEmailBeforeEncodingOrSaving() {
+		AdminUserCreateRequest request = new AdminUserCreateRequest(
+				"Ada", "Lovelace", " ADA@Example.COM ", "strong-password", Role.USER);
+		when(userRepository.existsByEmail("ada@example.com")).thenReturn(true);
+
+		assertStatus(HttpStatus.CONFLICT, () -> service.createUser(request));
+
+		verify(passwordEncoder, never()).encode(any());
+		verify(userRepository, never()).saveAndFlush(any());
+	}
+
+	@Test
+	void translatesEmailUniqueConstraintRaceToConflict() {
+		AdminUserCreateRequest request = createRequest(Role.INSTRUCTOR);
+		when(passwordEncoder.encode(request.password())).thenReturn("encoded-password");
+		when(userRepository.saveAndFlush(any())).thenThrow(new DataIntegrityViolationException(
+				"duplicate", new RuntimeException("Detail: Key (email)=(ada@example.com) already exists.")));
+
+		assertStatus(HttpStatus.CONFLICT, () -> service.createUser(request));
+	}
+
+	@Test
+	void propagatesUnrelatedUserDataIntegrityViolation() {
+		AdminUserCreateRequest request = createRequest(Role.ADMIN);
+		when(passwordEncoder.encode(request.password())).thenReturn("encoded-password");
+		DataIntegrityViolationException exception = new DataIntegrityViolationException(
+				"insert failed", new RuntimeException("not-null constraint on app_users.name"));
+		when(userRepository.saveAndFlush(any())).thenThrow(exception);
+
+		assertThatThrownBy(() -> service.createUser(request)).isSameAs(exception);
+	}
+
+	@Test
+	void createRequestStringRepresentationRedactsPassword() {
+		AdminUserCreateRequest request = createRequest(Role.USER);
+
+		assertThat(request.toString()).contains("password=[REDACTED]").doesNotContain(request.password());
+	}
 
 	@Test
 	void listsSafeUsersInRepositoryOrderAndGetsOne() {
@@ -169,6 +242,10 @@ class AdminUserServiceTests {
 	private Course course(Long id) {
 		return new Course(id, "Course " + id, "Description", "Instructor", 60,
 				CourseLevel.BEGINNER, CourseCategory.INFORMATION_TECHNOLOGY);
+	}
+
+	private AdminUserCreateRequest createRequest(Role role) {
+		return new AdminUserCreateRequest("Ada", "Lovelace", "ada@example.com", "strong-password", role);
 	}
 
 	private void assertStatus(HttpStatus status, org.assertj.core.api.ThrowableAssert.ThrowingCallable action) {

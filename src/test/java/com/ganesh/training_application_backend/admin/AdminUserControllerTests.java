@@ -1,6 +1,8 @@
 package com.ganesh.training_application_backend.admin;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
@@ -35,6 +37,58 @@ class AdminUserControllerTests {
 
 	@MockitoBean AdminUserService service;
 	@Autowired MockMvc mockMvc;
+
+	@Test
+	void adminCanCreateUserAndReceivesOnlySafeAccountFields() throws Exception {
+		when(service.createUser(any())).thenReturn(
+				new UserResponse(12L, "Ada Lovelace", "ada@example.com", Role.INSTRUCTOR));
+
+		mockMvc.perform(post("/api/admin/users")
+				.with(user("admin").roles("ADMIN")).with(csrf())
+				.contentType(MediaType.APPLICATION_JSON).content(validCreateRequest()))
+				.andExpect(status().isCreated())
+				.andExpect(header().string("Location", "/api/admin/users/12"))
+				.andExpect(jsonPath("$.id").value(12))
+				.andExpect(jsonPath("$.name").value("Ada Lovelace"))
+				.andExpect(jsonPath("$.email").value("ada@example.com"))
+				.andExpect(jsonPath("$.role").value("INSTRUCTOR"))
+				.andExpect(jsonPath("$.password").doesNotExist())
+				.andExpect(jsonPath("$.passwordHash").doesNotExist());
+	}
+
+	@Test
+	void userCreationRequiresAdminRole() throws Exception {
+		mockMvc.perform(post("/api/admin/users").with(csrf())
+				.contentType(MediaType.APPLICATION_JSON).content(validCreateRequest()))
+				.andExpect(status().isUnauthorized());
+		mockMvc.perform(post("/api/admin/users")
+				.with(user("user").roles("USER")).with(csrf())
+				.contentType(MediaType.APPLICATION_JSON).content(validCreateRequest()))
+				.andExpect(status().isForbidden());
+		mockMvc.perform(post("/api/admin/users")
+				.with(user("instructor").roles("INSTRUCTOR")).with(csrf())
+				.contentType(MediaType.APPLICATION_JSON).content(validCreateRequest()))
+				.andExpect(status().isForbidden());
+	}
+
+	@Test
+	void userCreationRejectsInvalidFieldsAndUnknownRole() throws Exception {
+		mockMvc.perform(post("/api/admin/users")
+				.with(user("admin").roles("ADMIN")).with(csrf())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"firstName\":\" \",\"lastName\":\"\",\"email\":\"invalid\","
+						+ "\"password\":\"short\",\"role\":null}"))
+				.andExpect(status().isBadRequest());
+		mockMvc.perform(post("/api/admin/users")
+				.with(user("admin").roles("ADMIN")).with(csrf())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"firstName\":\"Ada\",\"lastName\":\"Lovelace\","
+						+ "\"email\":\"ada@example.com\",\"password\":\"strong-password\","
+						+ "\"role\":\"SUPER_ADMIN\"}"))
+				.andExpect(status().isBadRequest());
+
+		verify(service, never()).createUser(any());
+	}
 
 	@Test
 	void onlyAdminCanListUsers() throws Exception {
@@ -104,5 +158,11 @@ class AdminUserControllerTests {
 	private CourseAssignmentResponse assignment() {
 		return new CourseAssignmentResponse(10L, new CourseManagementResponse(5L, "Course", "Description",
 				"Instructor", 60, CourseLevel.BEGINNER, CourseCategory.INFORMATION_TECHNOLOGY), Instant.EPOCH);
+	}
+
+	private String validCreateRequest() {
+		return "{\"firstName\":\"Ada\",\"lastName\":\"Lovelace\","
+				+ "\"email\":\"ada@example.com\",\"password\":\"strong-password\","
+				+ "\"role\":\"INSTRUCTOR\"}";
 	}
 }
