@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
@@ -25,6 +26,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.ganesh.training_application_backend.admin.dto.AdminUserCreateRequest;
+import com.ganesh.training_application_backend.admin.dto.AdminUserEnabledRequest;
+import com.ganesh.training_application_backend.admin.dto.AdminUserUpdateRequest;
 import com.ganesh.training_application_backend.admin.dto.CourseAssignmentRequest;
 import com.ganesh.training_application_backend.auth.AppUser;
 import com.ganesh.training_application_backend.auth.AppUserRepository;
@@ -63,12 +66,123 @@ class AdminUserServiceTests {
 		assertThat(persisted.getName()).isEqualTo("Ada Lovelace");
 		assertThat(persisted.getEmail()).isEqualTo("ada@example.com");
 		assertThat(persisted.getRole()).isEqualTo(role);
+		assertThat(persisted.isEnabled()).isTrue();
 		assertThat(persisted.getPasswordHash()).isEqualTo("encoded-password").isNotEqualTo(request.password());
 		verify(passwordEncoder).encode("strong-password");
 		assertThat(response.id()).isEqualTo(42L);
 		assertThat(response.name()).isEqualTo("Ada Lovelace");
 		assertThat(response.email()).isEqualTo("ada@example.com");
 		assertThat(response.role()).isEqualTo(role);
+		assertThat(response.enabled()).isTrue();
+	}
+
+	@Test
+	void updatesNameNormalizedEmailAndRole() {
+		AppUser target = user(2L);
+		when(userRepository.findById(2L)).thenReturn(Optional.of(target));
+		when(userRepository.saveAndFlush(target)).thenReturn(target);
+
+		var response = service.updateUser(2L,
+				new AdminUserUpdateRequest(" Updated User ", " UPDATED@Example.COM ", Role.INSTRUCTOR), 1L);
+
+		assertThat(target.getName()).isEqualTo("Updated User");
+		assertThat(target.getEmail()).isEqualTo("updated@example.com");
+		assertThat(target.getRole()).isEqualTo(Role.INSTRUCTOR);
+		assertThat(response.name()).isEqualTo("Updated User");
+		assertThat(response.email()).isEqualTo("updated@example.com");
+		assertThat(response.role()).isEqualTo(Role.INSTRUCTOR);
+		assertThat(response.enabled()).isTrue();
+	}
+
+	@Test
+	void unchangedNormalizedEmailIsAllowedWithoutDuplicateQuery() {
+		AppUser target = user(2L);
+		when(userRepository.findById(2L)).thenReturn(Optional.of(target));
+		when(userRepository.saveAndFlush(target)).thenReturn(target);
+
+		service.updateUser(2L,
+				new AdminUserUpdateRequest("User Two", " USER2@Example.COM ", Role.USER), 1L);
+
+		verify(userRepository, never()).existsByEmail(any());
+		verify(userRepository).saveAndFlush(target);
+	}
+
+	@Test
+	void rejectsAnotherUsersEmailBeforeUpdating() {
+		AppUser target = user(2L);
+		when(userRepository.findById(2L)).thenReturn(Optional.of(target));
+		when(userRepository.existsByEmail("user1@example.com")).thenReturn(true);
+
+		assertStatus(HttpStatus.CONFLICT, () -> service.updateUser(2L,
+				new AdminUserUpdateRequest("User Two", " USER1@Example.com ", Role.USER), 1L));
+
+		verify(userRepository, never()).saveAndFlush(any());
+	}
+
+	@Test
+	void translatesEmailUpdateRaceToConflict() {
+		AppUser target = user(2L);
+		when(userRepository.findById(2L)).thenReturn(Optional.of(target));
+		when(userRepository.saveAndFlush(target)).thenThrow(new DataIntegrityViolationException(
+				"duplicate", new RuntimeException("Detail: Key (email)=(new@example.com) already exists.")));
+
+		assertStatus(HttpStatus.CONFLICT, () -> service.updateUser(2L,
+				new AdminUserUpdateRequest("User Two", "new@example.com", Role.USER), 1L));
+	}
+
+	@Test
+	void propagatesUnrelatedIntegrityFailureDuringUpdate() {
+		AppUser target = user(2L);
+		when(userRepository.findById(2L)).thenReturn(Optional.of(target));
+		DataIntegrityViolationException exception = new DataIntegrityViolationException(
+				"update failed", new RuntimeException("unrelated constraint"));
+		when(userRepository.saveAndFlush(target)).thenThrow(exception);
+
+		assertThatThrownBy(() -> service.updateUser(2L,
+				new AdminUserUpdateRequest("User Two", "new@example.com", Role.USER), 1L)).isSameAs(exception);
+	}
+
+	@Test
+	void currentAdminCannotDemoteThemselves() {
+		AppUser currentAdmin = new AppUser(1L, "Admin", "admin@example.com", "hash", Role.ADMIN);
+		when(userRepository.findById(1L)).thenReturn(Optional.of(currentAdmin));
+
+		assertStatus(HttpStatus.BAD_REQUEST, () -> service.updateUser(1L,
+				new AdminUserUpdateRequest("Admin", "admin@example.com", Role.USER), 1L));
+
+		assertThat(currentAdmin.getRole()).isEqualTo(Role.ADMIN);
+		verify(userRepository, never()).saveAndFlush(any());
+	}
+
+	@Test
+	void disablesAndReEnablesAnotherUserWithoutTouchingHistoricalAssignments() {
+		AppUser target = user(2L);
+		CourseAssignment historicalAssignment = new CourseAssignment(target, course(5L), java.time.Instant.EPOCH);
+		when(userRepository.findById(2L)).thenReturn(Optional.of(target));
+		when(userRepository.saveAndFlush(target)).thenReturn(target);
+
+		var disabled = service.setUserEnabled(2L, new AdminUserEnabledRequest(false), 1L);
+		assertThat(disabled.enabled()).isFalse();
+		assertThat(historicalAssignment.getUser()).isSameAs(target);
+
+		var reEnabled = service.setUserEnabled(2L, new AdminUserEnabledRequest(true), 1L);
+		assertThat(reEnabled.enabled()).isTrue();
+		assertThat(historicalAssignment.getUser()).isSameAs(target);
+		verify(userRepository, times(2)).saveAndFlush(target);
+		verify(userRepository, never()).delete(any(AppUser.class));
+		verifyNoInteractions(assignmentRepository, courseRepository);
+	}
+
+	@Test
+	void currentAdminCannotDisableThemselves() {
+		AppUser currentAdmin = new AppUser(1L, "Admin", "admin@example.com", "hash", Role.ADMIN);
+		when(userRepository.findById(1L)).thenReturn(Optional.of(currentAdmin));
+
+		assertStatus(HttpStatus.BAD_REQUEST,
+				() -> service.setUserEnabled(1L, new AdminUserEnabledRequest(false), 1L));
+
+		assertThat(currentAdmin.isEnabled()).isTrue();
+		verify(userRepository, never()).saveAndFlush(any());
 	}
 
 	@Test

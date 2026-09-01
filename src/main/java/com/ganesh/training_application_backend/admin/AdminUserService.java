@@ -12,10 +12,13 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.ganesh.training_application_backend.admin.dto.AdminUserCreateRequest;
+import com.ganesh.training_application_backend.admin.dto.AdminUserEnabledRequest;
+import com.ganesh.training_application_backend.admin.dto.AdminUserUpdateRequest;
 import com.ganesh.training_application_backend.admin.dto.CourseAssignmentRequest;
 import com.ganesh.training_application_backend.admin.dto.CourseAssignmentResponse;
 import com.ganesh.training_application_backend.auth.AppUser;
 import com.ganesh.training_application_backend.auth.AppUserRepository;
+import com.ganesh.training_application_backend.auth.Role;
 import com.ganesh.training_application_backend.auth.dto.UserResponse;
 import com.ganesh.training_application_backend.course.Course;
 import com.ganesh.training_application_backend.course.CourseRepository;
@@ -62,6 +65,37 @@ public class AdminUserService {
 	@Transactional(readOnly = true)
 	public UserResponse getUser(Long userId) {
 		return toUserResponse(requireUser(userId));
+	}
+
+	@Transactional
+	public UserResponse updateUser(Long userId, AdminUserUpdateRequest request, Long currentAdminId) {
+		AppUser user = requireUser(userId);
+		if (userId.equals(currentAdminId) && request.role() != Role.ADMIN) {
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "You cannot change your own ADMIN role");
+		}
+
+		String email = AppUser.normalizeEmail(request.email());
+		if (!email.equals(user.getEmail()) && userRepository.existsByEmail(email)) {
+			throw duplicateEmail();
+		}
+
+		user.updateAccount(request.name(), email, request.role());
+		try {
+			return toUserResponse(userRepository.saveAndFlush(user));
+		} catch (DataIntegrityViolationException exception) {
+			if (isDuplicateEmail(exception)) throw duplicateEmail();
+			throw exception;
+		}
+	}
+
+	@Transactional
+	public UserResponse setUserEnabled(Long userId, AdminUserEnabledRequest request, Long currentAdminId) {
+		AppUser user = requireUser(userId);
+		if (userId.equals(currentAdminId) && !request.enabled()) {
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "You cannot disable your own account");
+		}
+		user.setEnabled(request.enabled());
+		return toUserResponse(userRepository.saveAndFlush(user));
 	}
 
 	@Transactional(readOnly = true)
@@ -123,7 +157,7 @@ public class AdminUserService {
 	}
 
 	private UserResponse toUserResponse(AppUser user) {
-		return new UserResponse(user.getId(), user.getName(), user.getEmail(), user.getRole());
+		return new UserResponse(user.getId(), user.getName(), user.getEmail(), user.getRole(), user.isEnabled());
 	}
 
 	private CourseAssignmentResponse toAssignmentResponse(CourseAssignment assignment) {

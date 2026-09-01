@@ -54,7 +54,7 @@ class AuthControllerTests {
 	@Test
 	void signupIsPublicReturnsCreatedAndNeverSerializesPasswordHash() throws Exception {
 		when(authService.signup(any(SignupRequest.class)))
-				.thenReturn(new UserResponse(1L, "Ganesh", "ganesh@example.com", Role.USER));
+				.thenReturn(new UserResponse(1L, "Ganesh", "ganesh@example.com", Role.USER, true));
 
 		mockMvc.perform(post("/api/auth/signup")
 				.contentType(MediaType.APPLICATION_JSON)
@@ -64,6 +64,7 @@ class AuthControllerTests {
 				.andExpect(status().isCreated())
 				.andExpect(jsonPath("$.email").value("ganesh@example.com"))
 				.andExpect(jsonPath("$.role").value("USER"))
+				.andExpect(jsonPath("$.enabled").value(true))
 				.andExpect(jsonPath("$.password").doesNotExist())
 				.andExpect(jsonPath("$.passwordHash").doesNotExist());
 	}
@@ -96,7 +97,7 @@ class AuthControllerTests {
 		AppUserPrincipal principal = principal();
 		when(userDetailsService.loadUserByUsername("ganesh@example.com")).thenReturn(principal);
 		when(authService.toResponse(any(AppUserPrincipal.class)))
-				.thenReturn(new UserResponse(1L, "Ganesh", "ganesh@example.com", Role.USER));
+				.thenReturn(new UserResponse(1L, "Ganesh", "ganesh@example.com", Role.USER, true));
 
 		MvcResult login = mockMvc.perform(post("/api/auth/login")
 				.contentType(MediaType.APPLICATION_JSON)
@@ -113,7 +114,39 @@ class AuthControllerTests {
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.email").value("ganesh@example.com"))
 				.andExpect(jsonPath("$.role").value("USER"))
+				.andExpect(jsonPath("$.enabled").value(true))
 				.andExpect(jsonPath("$.passwordHash").doesNotExist());
+	}
+
+	@Test
+	void disabledUserCannotLogin() throws Exception {
+		AppUser disabled = new AppUser(1L, "Ganesh", "ganesh@example.com",
+				passwordEncoder.encode("SecurePass123!"), Role.USER, false);
+		when(userDetailsService.loadUserByUsername("ganesh@example.com"))
+				.thenReturn(new AppUserPrincipal(disabled));
+
+		mockMvc.perform(post("/api/auth/login")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"email\":\"ganesh@example.com\",\"password\":\"SecurePass123!\"}"))
+				.andExpect(status().isUnauthorized())
+				.andExpect(jsonPath("$.passwordHash").doesNotExist());
+	}
+
+	@Test
+	void reEnabledUserCanUseExistingLoginFlow() throws Exception {
+		AppUser reEnabled = new AppUser(1L, "Ganesh", "ganesh@example.com",
+				passwordEncoder.encode("SecurePass123!"), Role.USER, false);
+		reEnabled.setEnabled(true);
+		when(userDetailsService.loadUserByUsername("ganesh@example.com"))
+				.thenReturn(new AppUserPrincipal(reEnabled));
+		when(authService.toResponse(any(AppUserPrincipal.class)))
+				.thenReturn(new UserResponse(1L, "Ganesh", "ganesh@example.com", Role.USER, true));
+
+		mockMvc.perform(post("/api/auth/login")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"email\":\"ganesh@example.com\",\"password\":\"SecurePass123!\"}"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.enabled").value(true));
 	}
 
 	@Test
@@ -186,7 +219,7 @@ class AuthControllerTests {
 	private MockHttpSession loginSession() throws Exception {
 		when(userDetailsService.loadUserByUsername("ganesh@example.com")).thenReturn(principal());
 		when(authService.toResponse(any(AppUserPrincipal.class)))
-				.thenReturn(new UserResponse(1L, "Ganesh", "ganesh@example.com", Role.USER));
+				.thenReturn(new UserResponse(1L, "Ganesh", "ganesh@example.com", Role.USER, true));
 		MvcResult result = mockMvc.perform(post("/api/auth/login")
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("""

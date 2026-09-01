@@ -42,6 +42,7 @@ class InitialAdminBootstrapTests {
 		assertThat(admin.getName()).isEqualTo("SkillForge Admin");
 		assertThat(admin.getEmail()).isEqualTo("admin@example.com");
 		assertThat(admin.getRole()).isEqualTo(Role.ADMIN);
+		assertThat(admin.isEnabled()).isTrue();
 		assertThat(admin.getPasswordHash()).isNotEqualTo("AdminPass123!");
 		assertThat(passwordEncoder.matches("AdminPass123!", admin.getPasswordHash())).isTrue();
 	}

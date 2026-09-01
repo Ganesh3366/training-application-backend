@@ -42,11 +42,12 @@ public class AuthService {
 	}
 
 	public UserResponse toResponse(AppUserPrincipal principal) {
-		return new UserResponse(principal.getId(), principal.getName(), principal.getUsername(), principal.getRole());
+		return new UserResponse(principal.getId(), principal.getName(), principal.getUsername(), principal.getRole(),
+				principal.isEnabled());
 	}
 
 	private UserResponse toResponse(AppUser user) {
-		return new UserResponse(user.getId(), user.getName(), user.getEmail(), user.getRole());
+		return new UserResponse(user.getId(), user.getName(), user.getEmail(), user.getRole(), user.isEnabled());
 	}
 
 	private ResponseStatusException duplicateEmail() {

@@ -1,13 +1,16 @@
 package com.ganesh.training_application_backend.admin;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -24,6 +27,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.ganesh.training_application_backend.admin.dto.CourseAssignmentResponse;
+import com.ganesh.training_application_backend.auth.AppUser;
+import com.ganesh.training_application_backend.auth.AppUserPrincipal;
 import com.ganesh.training_application_backend.auth.Role;
 import com.ganesh.training_application_backend.auth.dto.UserResponse;
 import com.ganesh.training_application_backend.config.SecurityConfig;
@@ -41,7 +46,7 @@ class AdminUserControllerTests {
 	@Test
 	void adminCanCreateUserAndReceivesOnlySafeAccountFields() throws Exception {
 		when(service.createUser(any())).thenReturn(
-				new UserResponse(12L, "Ada Lovelace", "ada@example.com", Role.INSTRUCTOR));
+				new UserResponse(12L, "Ada Lovelace", "ada@example.com", Role.INSTRUCTOR, true));
 
 		mockMvc.perform(post("/api/admin/users")
 				.with(user("admin").roles("ADMIN")).with(csrf())
@@ -52,8 +57,85 @@ class AdminUserControllerTests {
 				.andExpect(jsonPath("$.name").value("Ada Lovelace"))
 				.andExpect(jsonPath("$.email").value("ada@example.com"))
 				.andExpect(jsonPath("$.role").value("INSTRUCTOR"))
+				.andExpect(jsonPath("$.enabled").value(true))
 				.andExpect(jsonPath("$.password").doesNotExist())
 				.andExpect(jsonPath("$.passwordHash").doesNotExist());
+	}
+
+	@Test
+	void adminCanUpdateUserAndReceivesSafeEnabledResponse() throws Exception {
+		when(service.updateUser(eq(2L), any(), eq(1L))).thenReturn(
+				new UserResponse(2L, "Updated User", "updated@example.com", Role.INSTRUCTOR, true));
+
+		mockMvc.perform(put("/api/admin/users/2")
+				.with(user(principal(1L, Role.ADMIN))).with(csrf())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"name\":\"Updated User\",\"email\":\"updated@example.com\","
+						+ "\"role\":\"INSTRUCTOR\"}"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.id").value(2))
+				.andExpect(jsonPath("$.name").value("Updated User"))
+				.andExpect(jsonPath("$.email").value("updated@example.com"))
+				.andExpect(jsonPath("$.role").value("INSTRUCTOR"))
+				.andExpect(jsonPath("$.enabled").value(true))
+				.andExpect(jsonPath("$.password").doesNotExist())
+				.andExpect(jsonPath("$.passwordHash").doesNotExist());
+	}
+
+	@Test
+	void adminCanDisableAndReEnableAnotherUser() throws Exception {
+		when(service.setUserEnabled(eq(2L), any(), eq(1L)))
+				.thenReturn(new UserResponse(2L, "User", "user@example.com", Role.USER, false))
+				.thenReturn(new UserResponse(2L, "User", "user@example.com", Role.USER, true));
+
+		mockMvc.perform(patch("/api/admin/users/2/enabled")
+				.with(user(principal(1L, Role.ADMIN))).with(csrf())
+				.contentType(MediaType.APPLICATION_JSON).content("{\"enabled\":false}"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.enabled").value(false))
+				.andExpect(jsonPath("$.passwordHash").doesNotExist());
+		mockMvc.perform(patch("/api/admin/users/2/enabled")
+				.with(user(principal(1L, Role.ADMIN))).with(csrf())
+				.contentType(MediaType.APPLICATION_JSON).content("{\"enabled\":true}"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.enabled").value(true));
+	}
+
+	@Test
+	void userManagementEndpointsRequireAdminRole() throws Exception {
+		String update = "{\"name\":\"User\",\"email\":\"user@example.com\",\"role\":\"USER\"}";
+		String enabled = "{\"enabled\":false}";
+
+		mockMvc.perform(put("/api/admin/users/2").with(csrf())
+				.contentType(MediaType.APPLICATION_JSON).content(update)).andExpect(status().isUnauthorized());
+		mockMvc.perform(patch("/api/admin/users/2/enabled").with(csrf())
+				.contentType(MediaType.APPLICATION_JSON).content(enabled)).andExpect(status().isUnauthorized());
+		for (Role role : List.of(Role.USER, Role.INSTRUCTOR)) {
+			mockMvc.perform(put("/api/admin/users/2")
+					.with(user(principal(3L, role))).with(csrf())
+					.contentType(MediaType.APPLICATION_JSON).content(update)).andExpect(status().isForbidden());
+			mockMvc.perform(patch("/api/admin/users/2/enabled")
+					.with(user(principal(3L, role))).with(csrf())
+					.contentType(MediaType.APPLICATION_JSON).content(enabled)).andExpect(status().isForbidden());
+		}
+	}
+
+	@Test
+	void userManagementRejectsInvalidRequests() throws Exception {
+		mockMvc.perform(put("/api/admin/users/2")
+				.with(user(principal(1L, Role.ADMIN))).with(csrf())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"name\":\" \",\"email\":\"invalid\",\"role\":null}"))
+				.andExpect(status().isBadRequest());
+		mockMvc.perform(put("/api/admin/users/2")
+				.with(user(principal(1L, Role.ADMIN))).with(csrf())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"name\":\"User\",\"email\":\"user@example.com\",\"role\":\"OWNER\"}"))
+				.andExpect(status().isBadRequest());
+		mockMvc.perform(patch("/api/admin/users/2/enabled")
+				.with(user(principal(1L, Role.ADMIN))).with(csrf())
+				.contentType(MediaType.APPLICATION_JSON).content("{}"))
+				.andExpect(status().isBadRequest());
 	}
 
 	@Test
@@ -96,18 +178,20 @@ class AdminUserControllerTests {
 		mockMvc.perform(get("/api/admin/users").with(user("user").roles("USER")))
 				.andExpect(status().isForbidden());
 
-		when(service.getUsers()).thenReturn(List.of(new UserResponse(1L, "Admin", "admin@example.com", Role.ADMIN)));
+		when(service.getUsers()).thenReturn(
+				List.of(new UserResponse(1L, "Admin", "admin@example.com", Role.ADMIN, true)));
 		mockMvc.perform(get("/api/admin/users").with(user("admin").roles("ADMIN")))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$[0].id").value(1))
 				.andExpect(jsonPath("$[0].email").value("admin@example.com"))
+				.andExpect(jsonPath("$[0].enabled").value(true))
 				.andExpect(jsonPath("$[0].password").doesNotExist())
 				.andExpect(jsonPath("$[0].passwordHash").doesNotExist());
 	}
 
 	@Test
 	void adminCanGetUserAndAssignments() throws Exception {
-		when(service.getUser(1L)).thenReturn(new UserResponse(1L, "User", "user@example.com", Role.USER));
+		when(service.getUser(1L)).thenReturn(new UserResponse(1L, "User", "user@example.com", Role.USER, true));
 		when(service.getAssignments(1L)).thenReturn(List.of(assignment()));
 
 		mockMvc.perform(get("/api/admin/users/1").with(user("admin").roles("ADMIN")))
@@ -164,5 +248,10 @@ class AdminUserControllerTests {
 		return "{\"firstName\":\"Ada\",\"lastName\":\"Lovelace\","
 				+ "\"email\":\"ada@example.com\",\"password\":\"strong-password\","
 				+ "\"role\":\"INSTRUCTOR\"}";
+	}
+
+	private AppUserPrincipal principal(Long id, Role role) {
+		return new AppUserPrincipal(new AppUser(id, role.name(), role.name().toLowerCase() + "@example.com",
+				"hash", role));
 	}
 }

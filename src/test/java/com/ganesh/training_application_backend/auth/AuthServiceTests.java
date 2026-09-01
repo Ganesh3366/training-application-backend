@@ -51,7 +51,9 @@ class AuthServiceTests {
 		assertThat(stored.getPasswordHash()).isNotEqualTo("SecurePass123!");
 		assertThat(passwordEncoder.matches("SecurePass123!", stored.getPasswordHash())).isTrue();
 		assertThat(stored.getRole()).isEqualTo(Role.USER);
+		assertThat(stored.isEnabled()).isTrue();
 		assertThat(response.role()).isEqualTo(Role.USER);
+		assertThat(response.enabled()).isTrue();
 		assertThat(SignupRequest.class.getRecordComponents())
 				.extracting(component -> component.getName())
 				.doesNotContain("role", "passwordHash");

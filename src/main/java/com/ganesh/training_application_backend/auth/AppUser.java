@@ -32,15 +32,23 @@ public class AppUser {
 	@Column(nullable = false)
 	private Role role;
 
+	@Column(nullable = false, columnDefinition = "boolean default true")
+	private boolean enabled = true;
+
 	protected AppUser() {
 	}
 
 	public AppUser(Long id, String name, String email, String passwordHash, Role role) {
+		this(id, name, email, passwordHash, role, true);
+	}
+
+	public AppUser(Long id, String name, String email, String passwordHash, Role role, boolean enabled) {
 		this.id = id;
 		this.name = name == null ? null : name.trim();
 		this.email = normalizeEmail(email);
 		this.passwordHash = passwordHash;
 		this.role = role;
+		this.enabled = enabled;
 	}
 
 	public static String normalizeEmail(String email) {
@@ -65,5 +73,19 @@ public class AppUser {
 
 	public Role getRole() {
 		return role;
+	}
+
+	public boolean isEnabled() {
+		return enabled;
+	}
+
+	public void updateAccount(String name, String email, Role role) {
+		this.name = name == null ? null : name.trim();
+		this.email = normalizeEmail(email);
+		this.role = role;
+	}
+
+	public void setEnabled(boolean enabled) {
+		this.enabled = enabled;
 	}
 }
