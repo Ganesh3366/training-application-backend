@@ -74,6 +74,28 @@ class ModuleProgressServiceTests {
 	}
 
 	@Test
+	void returnsInProgressWhenAQuizWasAttemptedButNoModuleIsComplete() {
+		Course course = course();
+		CourseModule first = new CourseModule(10L, course, "First", null, 1);
+		CourseModule second = new CourseModule(11L, course, "Second", null, 2);
+		ModuleProgress progress = new ModuleProgress(
+				new AppUser(7L, "Learner", "learner@example.com", "hash", Role.USER), first);
+		progress.recordAttempt(40, false, Instant.parse("2026-01-01T10:00:00Z"));
+		when(courseRepository.existsById(1L)).thenReturn(true);
+		when(courseModuleRepository.findByCourseIdOrderByPositionAsc(1L)).thenReturn(List.of(first, second));
+		when(moduleProgressRepository.findByUserIdAndModuleCourseId(7L, 1L)).thenReturn(List.of(progress));
+
+		CourseProgressResponse response = service.getCourseProgress(1L, 7L);
+
+		assertThat(response.completedModules()).isZero();
+		assertThat(response.pendingModules()).isEqualTo(2);
+		assertThat(response.progressPercentage()).isZero();
+		assertThat(response.completed()).isFalse();
+		assertThat(response.status()).isEqualTo(CourseProgressStatus.IN_PROGRESS);
+		assertThat(response.modules().get(0).attemptsCount()).isEqualTo(1);
+	}
+
+	@Test
 	void returnsCompletedForTwoOfTwoCompletedModules() {
 		Course course = course();
 		CourseModule first = new CourseModule(10L, course, "First", null, 1);

@@ -5,10 +5,13 @@ public enum CourseProgressStatus {
 	IN_PROGRESS,
 	COMPLETED;
 
-	public static CourseProgressStatus from(int completedModules, int totalModules) {
-		if (totalModules == 0 || completedModules == 0) {
+	public static CourseProgressStatus from(int completedModules, int totalModules, boolean hasLearnerActivity) {
+		if (totalModules == 0) {
 			return NOT_STARTED;
 		}
-		return completedModules == totalModules ? COMPLETED : IN_PROGRESS;
+		if (completedModules == totalModules) {
+			return COMPLETED;
+		}
+		return completedModules > 0 || hasLearnerActivity ? IN_PROGRESS : NOT_STARTED;
 	}
 }

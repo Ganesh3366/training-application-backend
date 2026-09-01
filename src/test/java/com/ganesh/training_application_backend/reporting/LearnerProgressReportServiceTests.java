@@ -82,6 +82,27 @@ class LearnerProgressReportServiceTests {
 	}
 
 	@Test
+	void failedOnlyProgressReturnsPersistedAttemptAndScoreAggregates() {
+		TestData data = testData();
+		ModuleProgress progress = new ModuleProgress(data.learner(), data.modules().get(0));
+		recordAttempt(progress, 60, false, Instant.parse("2026-01-01T10:00:00Z"));
+		recordAttempt(progress, 40, false, Instant.parse("2026-01-02T10:00:00Z"));
+		stubReads(data, List.of(progress), List.of());
+
+		LearnerCourseReportResponse response = service.getReports().get(0);
+
+		assertThat(response.status()).isEqualTo(CourseProgressStatus.IN_PROGRESS);
+		assertThat(response.progressPercentage()).isZero();
+		assertThat(response.completedModules()).isZero();
+		assertThat(response.pendingModules()).isEqualTo(2);
+		assertThat(response.modules().get(0).completed()).isFalse();
+		assertThat(response.modules().get(0).attemptCount()).isEqualTo(2);
+		assertThat(response.modules().get(0).lastScore()).isEqualTo(40);
+		assertThat(response.modules().get(0).bestScore()).isEqualTo(60);
+		assertThat(response.modules().get(0).completedAt()).isNull();
+	}
+
+	@Test
 	void completedCourseReturnsCertificateAndCompletionDate() {
 		TestData data = testData();
 		ModuleProgress first = new ModuleProgress(data.learner(), data.modules().get(0));

@@ -40,7 +40,8 @@ public class ModuleProgressService {
 		int completed = (int) responses.stream().filter(ModuleProgressResponse::completed).count();
 		int total = responses.size();
 		int progressPercentage = total == 0 ? 0 : (int) Math.round(completed * 100.0 / total);
-		CourseProgressStatus status = CourseProgressStatus.from(completed, total);
+		boolean hasLearnerActivity = responses.stream().anyMatch(response -> response.attemptsCount() > 0);
+		CourseProgressStatus status = CourseProgressStatus.from(completed, total, hasLearnerActivity);
 		return new CourseProgressResponse(courseId, total, completed, total - completed, progressPercentage,
 				status == CourseProgressStatus.COMPLETED, status, responses);
 	}

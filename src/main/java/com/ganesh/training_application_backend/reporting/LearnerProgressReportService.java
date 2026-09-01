@@ -74,7 +74,8 @@ public class LearnerProgressReportService {
 				.map(module -> toModuleResponse(module, progressByModule.get(module.getId()))).toList();
 		int total = moduleResponses.size();
 		int completed = (int) moduleResponses.stream().filter(LearnerModuleReportResponse::completed).count();
-		CourseProgressStatus status = CourseProgressStatus.from(completed, total);
+		boolean hasLearnerActivity = moduleResponses.stream().anyMatch(module -> module.attemptCount() > 0);
+		CourseProgressStatus status = CourseProgressStatus.from(completed, total, hasLearnerActivity);
 		int percentage = total == 0 ? 0 : (int) Math.round(completed * 100.0 / total);
 		LocalDate completionDate = completionDate(status, certificate, moduleResponses);
 

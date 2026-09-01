@@ -54,10 +54,32 @@ class LearnerProgressReportControllerTests {
 				.andExpect(status().isOk());
 	}
 
+	@Test
+	void failedAttemptAggregatesAreReturnedWithoutBeingReplacedByNotAttemptedDefaults() throws Exception {
+		when(service.getReports()).thenReturn(List.of(failedAttemptReport()));
+
+		mockMvc.perform(get("/api/management/reports/learner-courses").with(user(principal(Role.ADMIN))))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$[0].learnerId").value(7))
+				.andExpect(jsonPath("$[0].courseId").value(1))
+				.andExpect(jsonPath("$[0].status").value("IN_PROGRESS"))
+				.andExpect(jsonPath("$[0].modules[0].moduleId").value(10))
+				.andExpect(jsonPath("$[0].modules[0].completed").value(false))
+				.andExpect(jsonPath("$[0].modules[0].attemptCount").value(2))
+				.andExpect(jsonPath("$[0].modules[0].lastScore").value(40))
+				.andExpect(jsonPath("$[0].modules[0].bestScore").value(60));
+	}
+
 	private LearnerCourseReportResponse report() {
 		return new LearnerCourseReportResponse(7L, "Learner", "learner@example.com", 1L, "Course",
 				1, 2, 1, 50, CourseProgressStatus.IN_PROGRESS, null, null,
 				List.of(new LearnerModuleReportResponse(10L, "First", true, 70, 90, 2, null)));
+	}
+
+	private LearnerCourseReportResponse failedAttemptReport() {
+		return new LearnerCourseReportResponse(7L, "Learner", "learner@example.com", 1L, "Course",
+				0, 2, 2, 0, CourseProgressStatus.IN_PROGRESS, null, null,
+				List.of(new LearnerModuleReportResponse(10L, "First", false, 40, 60, 2, null)));
 	}
 
 	private AppUserPrincipal principal(Role role) {
