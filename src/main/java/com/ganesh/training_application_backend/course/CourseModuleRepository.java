@@ -1,8 +1,10 @@
 package com.ganesh.training_application_backend.course;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface CourseModuleRepository extends JpaRepository<CourseModule, Long> {
@@ -14,4 +16,7 @@ public interface CourseModuleRepository extends JpaRepository<CourseModule, Long
 	boolean existsByCourseId(Long courseId);
 
 	Optional<CourseModule> findTopByCourseIdOrderByPositionDesc(Long courseId);
+
+	@EntityGraph(attributePaths = "course")
+	List<CourseModule> findByCourseIdInOrderByCourseIdAscPositionAsc(Collection<Long> courseIds);
 }

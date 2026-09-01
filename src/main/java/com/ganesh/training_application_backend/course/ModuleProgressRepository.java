@@ -1,5 +1,6 @@
 package com.ganesh.training_application_backend.course;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -14,4 +15,8 @@ public interface ModuleProgressRepository extends JpaRepository<ModuleProgress, 
 	List<ModuleProgress> findByUserIdAndModuleCourseId(Long userId, Long courseId);
 
 	boolean existsByModuleId(Long moduleId);
+
+	@EntityGraph(attributePaths = {"user", "module", "module.course"})
+	List<ModuleProgress> findByUserIdInAndModuleCourseIdIn(
+			Collection<Long> userIds, Collection<Long> courseIds);
 }

@@ -13,4 +13,7 @@ public interface CourseAssignmentRepository extends JpaRepository<CourseAssignme
 
 	@EntityGraph(attributePaths = "course")
 	List<CourseAssignment> findAllByUserIdOrderByIdAsc(Long userId);
+
+	@EntityGraph(attributePaths = {"user", "course"})
+	List<CourseAssignment> findAllByOrderByIdAsc();
 }

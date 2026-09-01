@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.ganesh.training_application_backend.course.dto.CourseProgressResponse;
+import com.ganesh.training_application_backend.course.dto.CourseProgressStatus;
 import com.ganesh.training_application_backend.course.dto.ModuleProgressResponse;
 
 @Service
@@ -37,7 +38,11 @@ public class ModuleProgressService {
 				.collect(Collectors.toMap(progress -> progress.getModule().getId(), Function.identity()));
 		var responses = modules.stream().map(module -> toResponse(module, progressByModule.get(module.getId()))).toList();
 		int completed = (int) responses.stream().filter(ModuleProgressResponse::completed).count();
-		return new CourseProgressResponse(courseId, responses.size(), completed, responses.size() - completed, responses);
+		int total = responses.size();
+		int progressPercentage = total == 0 ? 0 : (int) Math.round(completed * 100.0 / total);
+		CourseProgressStatus status = CourseProgressStatus.from(completed, total);
+		return new CourseProgressResponse(courseId, total, completed, total - completed, progressPercentage,
+				status == CourseProgressStatus.COMPLETED, status, responses);
 	}
 
 	private ModuleProgressResponse toResponse(CourseModule module, ModuleProgress progress) {

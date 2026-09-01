@@ -7,5 +7,8 @@ public record CourseProgressResponse(
 		int totalModules,
 		int completedModules,
 		int pendingModules,
+		int progressPercentage,
+		boolean completed,
+		CourseProgressStatus status,
 		List<ModuleProgressResponse> modules) {
 }

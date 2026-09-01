@@ -20,6 +20,7 @@ import com.ganesh.training_application_backend.auth.AppUserPrincipal;
 import com.ganesh.training_application_backend.auth.Role;
 import com.ganesh.training_application_backend.config.SecurityConfig;
 import com.ganesh.training_application_backend.course.dto.CourseProgressResponse;
+import com.ganesh.training_application_backend.course.dto.CourseProgressStatus;
 import com.ganesh.training_application_backend.course.dto.ModuleProgressResponse;
 
 @WebMvcTest(ModuleProgressController.class)
@@ -37,11 +38,15 @@ class ModuleProgressControllerTests {
 	@Test
 	void authenticatedProgressUsesPrincipalAndNeedsNoUserId() throws Exception {
 		when(service.getCourseProgress(1L, 7L)).thenReturn(new CourseProgressResponse(
-				1L, 1, 0, 1, List.of(new ModuleProgressResponse(10L, false, 0, null, null, null))));
+				1L, 1, 0, 1, 0, false, CourseProgressStatus.NOT_STARTED,
+				List.of(new ModuleProgressResponse(10L, false, 0, null, null, null))));
 
 		mockMvc.perform(get("/api/courses/1/progress").queryParam("userId", "999").with(user(principal())))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.courseId").value(1))
+				.andExpect(jsonPath("$.progressPercentage").value(0))
+				.andExpect(jsonPath("$.completed").value(false))
+				.andExpect(jsonPath("$.status").value("NOT_STARTED"))
 				.andExpect(jsonPath("$.modules[0].attemptsCount").value(0))
 				.andExpect(jsonPath("$.modules[0].userId").doesNotExist());
 	}
