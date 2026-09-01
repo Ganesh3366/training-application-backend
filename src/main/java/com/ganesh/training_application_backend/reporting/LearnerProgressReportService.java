@@ -2,6 +2,7 @@ package com.ganesh.training_application_backend.reporting;
 
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -13,8 +14,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.ganesh.training_application_backend.admin.CourseAssignment;
 import com.ganesh.training_application_backend.admin.CourseAssignmentRepository;
+import com.ganesh.training_application_backend.auth.AppUser;
 import com.ganesh.training_application_backend.course.Certificate;
 import com.ganesh.training_application_backend.course.CertificateRepository;
+import com.ganesh.training_application_backend.course.Course;
 import com.ganesh.training_application_backend.course.CourseModule;
 import com.ganesh.training_application_backend.course.CourseModuleRepository;
 import com.ganesh.training_application_backend.course.ModuleProgress;
@@ -43,32 +46,38 @@ public class LearnerProgressReportService {
 	@Transactional(readOnly = true)
 	public List<LearnerCourseReportResponse> getReports() {
 		List<CourseAssignment> assignments = assignmentRepository.findAllByOrderByIdAsc();
-		if (assignments.isEmpty()) {
+		List<ModuleProgress> progressRecords = progressRepository.findAllForReporting();
+		if (assignments.isEmpty() && progressRecords.isEmpty()) {
 			return List.of();
 		}
 
-		Set<Long> learnerIds = assignments.stream().map(assignment -> assignment.getUser().getId())
+		Map<LearnerCourseKey, LearnerCourseSource> reportSources = new LinkedHashMap<>();
+		assignments.forEach(assignment -> reportSources.putIfAbsent(keyFor(assignment),
+				new LearnerCourseSource(assignment.getUser(), assignment.getCourse())));
+		progressRecords.forEach(progress -> reportSources.putIfAbsent(keyFor(progress),
+				new LearnerCourseSource(progress.getUser(), progress.getModule().getCourse())));
+
+		Set<Long> learnerIds = reportSources.values().stream().map(source -> source.learner().getId())
 				.collect(Collectors.toSet());
-		Set<Long> courseIds = assignments.stream().map(assignment -> assignment.getCourse().getId())
+		Set<Long> courseIds = reportSources.values().stream().map(source -> source.course().getId())
 				.collect(Collectors.toSet());
 		Map<Long, List<CourseModule>> modulesByCourse = moduleRepository
 				.findByCourseIdInOrderByCourseIdAscPositionAsc(courseIds).stream()
 				.collect(Collectors.groupingBy(module -> module.getCourse().getId()));
-		Map<LearnerCourseKey, Map<Long, ModuleProgress>> progressByAssignment = progressRepository
-				.findByUserIdInAndModuleCourseIdIn(learnerIds, courseIds).stream()
+		Map<LearnerCourseKey, Map<Long, ModuleProgress>> progressByLearnerCourse = progressRecords.stream()
 				.collect(Collectors.groupingBy(this::keyFor,
 						Collectors.toMap(progress -> progress.getModule().getId(), Function.identity())));
-		Map<LearnerCourseKey, Certificate> certificatesByAssignment = certificateRepository
+		Map<LearnerCourseKey, Certificate> certificatesByLearnerCourse = certificateRepository
 				.findByUserIdInAndCourseIdIn(learnerIds, courseIds).stream()
 				.collect(Collectors.toMap(this::keyFor, Function.identity()));
 
-		return assignments.stream().map(assignment -> toResponse(assignment,
-				modulesByCourse.getOrDefault(assignment.getCourse().getId(), List.of()),
-				progressByAssignment.getOrDefault(keyFor(assignment), Map.of()),
-				certificatesByAssignment.get(keyFor(assignment)))).toList();
+		return reportSources.entrySet().stream().map(entry -> toResponse(entry.getValue(),
+				modulesByCourse.getOrDefault(entry.getValue().course().getId(), List.of()),
+				progressByLearnerCourse.getOrDefault(entry.getKey(), Map.of()),
+				certificatesByLearnerCourse.get(entry.getKey()))).toList();
 	}
 
-	private LearnerCourseReportResponse toResponse(CourseAssignment assignment, List<CourseModule> modules,
+	private LearnerCourseReportResponse toResponse(LearnerCourseSource source, List<CourseModule> modules,
 			Map<Long, ModuleProgress> progressByModule, Certificate certificate) {
 		List<LearnerModuleReportResponse> moduleResponses = modules.stream()
 				.map(module -> toModuleResponse(module, progressByModule.get(module.getId()))).toList();
@@ -79,8 +88,8 @@ public class LearnerProgressReportService {
 		int percentage = total == 0 ? 0 : (int) Math.round(completed * 100.0 / total);
 		LocalDate completionDate = completionDate(status, certificate, moduleResponses);
 
-		return new LearnerCourseReportResponse(assignment.getUser().getId(), assignment.getUser().getName(),
-				assignment.getUser().getEmail(), assignment.getCourse().getId(), assignment.getCourse().getTitle(),
+		return new LearnerCourseReportResponse(source.learner().getId(), source.learner().getName(),
+				source.learner().getEmail(), source.course().getId(), source.course().getTitle(),
 				completed, total, total - completed, percentage, status, completionDate,
 				certificate == null ? null : certificate.getCertificateNumber(), moduleResponses);
 	}
@@ -119,5 +128,8 @@ public class LearnerProgressReportService {
 	}
 
 	private record LearnerCourseKey(Long learnerId, Long courseId) {
+	}
+
+	private record LearnerCourseSource(AppUser learner, Course course) {
 	}
 }

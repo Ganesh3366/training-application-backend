@@ -82,15 +82,17 @@ class LearnerProgressReportServiceTests {
 	}
 
 	@Test
-	void failedOnlyProgressReturnsPersistedAttemptAndScoreAggregates() {
+	void unassignedFailedOnlyProgressCreatesAnInProgressReportRow() {
 		TestData data = testData();
 		ModuleProgress progress = new ModuleProgress(data.learner(), data.modules().get(0));
 		recordAttempt(progress, 60, false, Instant.parse("2026-01-01T10:00:00Z"));
 		recordAttempt(progress, 40, false, Instant.parse("2026-01-02T10:00:00Z"));
-		stubReads(data, List.of(progress), List.of());
+		stubReads(data, List.of(), List.of(progress), List.of());
 
 		LearnerCourseReportResponse response = service.getReports().get(0);
 
+		assertThat(response.learnerId()).isEqualTo(data.learner().getId());
+		assertThat(response.courseId()).isEqualTo(data.course().getId());
 		assertThat(response.status()).isEqualTo(CourseProgressStatus.IN_PROGRESS);
 		assertThat(response.progressPercentage()).isZero();
 		assertThat(response.completedModules()).isZero();
@@ -100,6 +102,21 @@ class LearnerProgressReportServiceTests {
 		assertThat(response.modules().get(0).lastScore()).isEqualTo(40);
 		assertThat(response.modules().get(0).bestScore()).isEqualTo(60);
 		assertThat(response.modules().get(0).completedAt()).isNull();
+	}
+
+	@Test
+	void assignedCourseWithActivityProducesOnlyOneReportRow() {
+		TestData data = testData();
+		ModuleProgress progress = new ModuleProgress(data.learner(), data.modules().get(0));
+		recordAttempt(progress, 50, false, Instant.parse("2026-01-01T10:00:00Z"));
+		stubReads(data, List.of(data.assignment()), List.of(progress), List.of());
+
+		List<LearnerCourseReportResponse> responses = service.getReports();
+
+		assertThat(responses).hasSize(1);
+		assertThat(responses.get(0).learnerId()).isEqualTo(data.learner().getId());
+		assertThat(responses.get(0).courseId()).isEqualTo(data.course().getId());
+		assertThat(responses.get(0).modules().get(0).attemptCount()).isEqualTo(1);
 	}
 
 	@Test
@@ -123,11 +140,15 @@ class LearnerProgressReportServiceTests {
 	}
 
 	private void stubReads(TestData data, List<ModuleProgress> progress, List<Certificate> certificates) {
-		when(assignmentRepository.findAllByOrderByIdAsc()).thenReturn(List.of(data.assignment()));
+		stubReads(data, List.of(data.assignment()), progress, certificates);
+	}
+
+	private void stubReads(TestData data, List<CourseAssignment> assignments, List<ModuleProgress> progress,
+			List<Certificate> certificates) {
+		when(assignmentRepository.findAllByOrderByIdAsc()).thenReturn(assignments);
+		when(progressRepository.findAllForReporting()).thenReturn(progress);
 		when(moduleRepository.findByCourseIdInOrderByCourseIdAscPositionAsc(Set.of(1L)))
 				.thenReturn(data.modules());
-		when(progressRepository.findByUserIdInAndModuleCourseIdIn(Set.of(7L), Set.of(1L)))
-				.thenReturn(progress);
 		when(certificateRepository.findByUserIdInAndCourseIdIn(Set.of(7L), Set.of(1L)))
 				.thenReturn(certificates);
 	}
