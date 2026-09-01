@@ -135,13 +135,63 @@ class QuizServiceTests {
 	}
 
 	@Test
-	void belowPassingScoreDoesNotPass() {
+	void firstFailedSubmissionCreatesAndSavesProgressWithQuizAggregates() {
 		stubQuizData();
+		AppUser learner = new AppUser(1L, "Learner", "learner@example.com", "hash", Role.USER);
+		when(appUserRepository.getReferenceById(1L)).thenReturn(learner);
 
 		QuizResultResponse result = quizService.submitQuiz(1L, 10L, submission(1001L, 1003L, 1006L), 1L);
 
 		assertThat(result.score()).isEqualTo(67);
 		assertThat(result.passed()).isFalse();
+		ArgumentCaptor<ModuleProgress> progressCaptor = ArgumentCaptor.forClass(ModuleProgress.class);
+		verify(moduleProgressRepository).save(progressCaptor.capture());
+		ModuleProgress progress = progressCaptor.getValue();
+		assertThat(progress.getUser()).isSameAs(learner);
+		assertThat(progress.getModule()).isSameAs(quiz.getModule());
+		assertThat(progress.getAttemptsCount()).isEqualTo(1);
+		assertThat(progress.getLastScore()).isEqualTo(67);
+		assertThat(progress.getBestScore()).isEqualTo(67);
+		assertThat(progress.isCompleted()).isFalse();
+		assertThat(progress.getCompletedAt()).isNull();
+	}
+
+	@Test
+	void failuresPassAndPostPassFailurePreserveTheCompleteAttemptLifecycle() {
+		stubQuizData();
+		Long userId = 7L;
+		AppUser learner = new AppUser(userId, "Learner", "learner@example.com", "hash", Role.USER);
+		ModuleProgress progress = new ModuleProgress(learner, quiz.getModule());
+		when(moduleProgressRepository.findByUserIdAndModuleId(userId, 10L))
+				.thenReturn(Optional.of(progress));
+
+		quizService.submitQuiz(1L, 10L, submission(1001L, 1004L, 1006L), userId);
+		assertThat(progress.getAttemptsCount()).isEqualTo(1);
+		assertThat(progress.getLastScore()).isEqualTo(33);
+		assertThat(progress.getBestScore()).isEqualTo(33);
+		assertThat(progress.isCompleted()).isFalse();
+
+		quizService.submitQuiz(1L, 10L, submission(1001L, 1003L, 1006L), userId);
+		assertThat(progress.getAttemptsCount()).isEqualTo(2);
+		assertThat(progress.getLastScore()).isEqualTo(67);
+		assertThat(progress.getBestScore()).isEqualTo(67);
+		assertThat(progress.isCompleted()).isFalse();
+
+		quizService.submitQuiz(1L, 10L, submission(1001L, 1003L, 1005L), userId);
+		Instant completedAt = progress.getCompletedAt();
+		assertThat(progress.getAttemptsCount()).isEqualTo(3);
+		assertThat(progress.getLastScore()).isEqualTo(100);
+		assertThat(progress.getBestScore()).isEqualTo(100);
+		assertThat(progress.isCompleted()).isTrue();
+		assertThat(completedAt).isNotNull();
+
+		quizService.submitQuiz(1L, 10L, submission(1001L, 1004L, 1006L), userId);
+		assertThat(progress.getAttemptsCount()).isEqualTo(4);
+		assertThat(progress.getLastScore()).isEqualTo(33);
+		assertThat(progress.getBestScore()).isEqualTo(100);
+		assertThat(progress.isCompleted()).isTrue();
+		assertThat(progress.getCompletedAt()).isEqualTo(completedAt);
+		verify(moduleProgressRepository, org.mockito.Mockito.times(4)).save(progress);
 	}
 
 	@Test

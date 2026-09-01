@@ -1,6 +1,7 @@
 package com.ganesh.training_application_backend.course;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
@@ -105,6 +106,30 @@ class QuizControllerTests {
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.score").value(100))
 				.andExpect(jsonPath("$.passed").value(true));
+	}
+
+	@Test
+	void quizAttemptUsesTheAuthenticatedAccountEvenForManagementRoles() throws Exception {
+		AppUserPrincipal admin = new AppUserPrincipal(
+				new AppUser(9L, "Administrator", "admin@example.com", "hash", Role.ADMIN));
+		when(quizService.submitQuiz(org.mockito.ArgumentMatchers.eq(1L),
+				org.mockito.ArgumentMatchers.eq(10L), any(QuizSubmissionRequest.class),
+				org.mockito.ArgumentMatchers.eq(9L)))
+				.thenReturn(new QuizResultResponse(1, 0, 0, 70, false));
+
+		mockMvc.perform(post("/api/courses/1/modules/10/quiz/submit")
+				.with(user(admin))
+				.with(csrf())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+						{"answers":[{"questionId":101,"optionId":1002}],"userId":7}
+						"""))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.passed").value(false));
+
+		verify(quizService).submitQuiz(org.mockito.ArgumentMatchers.eq(1L),
+				org.mockito.ArgumentMatchers.eq(10L), any(QuizSubmissionRequest.class),
+				org.mockito.ArgumentMatchers.eq(9L));
 	}
 
 	private AppUserPrincipal principal() {
